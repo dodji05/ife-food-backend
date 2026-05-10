@@ -1,0 +1,29 @@
+# Dépendances
+node_modules/
+dist/
+
+# Variables d'environnement (NE JAMAIS commiter)
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+prisma/migrations/
