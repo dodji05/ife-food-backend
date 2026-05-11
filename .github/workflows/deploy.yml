@@ -1,0 +1,88 @@
+name: 🚀 CI/CD - Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  # TEST & BUILD
+  build:
+    runs-on: ubuntu-latest
+    name: 🧪 Test & Build
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js v22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: 📚 Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: 🏗️ Build application
+        run: npm run build
+
+      - name: ✅ Build successful
+        run: echo "✅ Build completed successfully!"
+
+  # DEPLOY TO VPS
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    name: 🌐 Deploy to VPS
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🚀 Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            echo "================================"
+            echo "🔄 Starting Deployment..."
+            echo "================================"
+            
+            cd /var/www/ife-food-backend
+            
+            echo "📥 Pulling latest code..."
+            git pull origin main
+            
+            echo "📦 Installing dependencies..."
+            npm install --legacy-peer-deps
+            
+            echo "🏗️ Building..."
+            npm run build
+            
+            echo "🗄️ Syncing database..."
+            npx prisma db push
+            
+            echo "🔄 Restarting application..."
+            pm2 restart ife-food-api
+            pm2 save
+            
+            echo "✅ Deployment completed!"
+            pm2 status
+
+      - name: ✅ Deployment Success
+        if: success()
+        run: echo "🎉 Deployment successful on VPS!"
+
+      - name: ❌ Deployment Failed
+        if: failure()
+        run: echo "⚠️ Deployment failed. Check logs above."
