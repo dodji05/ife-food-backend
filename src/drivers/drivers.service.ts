@@ -110,6 +110,39 @@ export class DriversService {
     return { data: { todayDeliveries, allDeliveries, avgRating: avgRating._avg.driverRating, totalEarnings: earnings._sum.amount ?? 0 } };
   }
 
+  async getActiveMissions(userId: string) {
+    const driver = await this.prisma.driver.findUnique({ where: { userId } });
+    if (!driver) throw new NotFoundException();
+    const deliveries = await this.prisma.delivery.findMany({
+      where: {
+        driverId: driver.id,
+        status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'IN_DELIVERY'] as any },
+      },
+      include: {
+        order: {
+          include: {
+            professional: { select: { businessName: true, address: true, phone: true, lat: true, lng: true } },
+            client: { select: { name: true, firstName: true, phone: true } },
+            items: { include: { product: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data: deliveries };
+  }
+
+  async getEarnings(userId: string) {
+    const driver = await this.prisma.driver.findUnique({ where: { userId } });
+    if (!driver) throw new NotFoundException();
+    const transactions = await this.prisma.transaction.findMany({
+      where: { driverId: driver.id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return { data: transactions };
+  }
+
   private async creditAfterDelivery(orderId: string, driverId: string) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) return;

@@ -22,8 +22,16 @@ async function bootstrap() {
   if (!frontendUrl && nodeEnv === 'production') {
     throw new Error('FRONTEND_URL doit être défini en production');
   }
+  // Liste blanche : frontend web + mobile (origin absent / capacitor / file://).
+  const allowedWebOrigins = (frontendUrl ?? 'http://localhost:4200')
+      .split(',').map((o) => o.trim());
   app.enableCors({
-    origin: frontendUrl ?? 'http://localhost:4200',
+    origin: (origin, cb) => {
+      // Requêtes sans origin (apps mobiles natives, curl, server-to-server) → autorisées
+      if (!origin) return cb(null, true);
+      if (allowedWebOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`CORS: origin ${origin} non autorisé`), false);
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });

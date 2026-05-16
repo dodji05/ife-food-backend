@@ -51,8 +51,8 @@ export class AuthService {
     const fullUser = await this.prisma.user.findUnique({
       where: { id: user.id },
       include: {
-        professional: { select: { id: true, businessName: true, status: true, isOpen: true } },
-        driver:       { select: { id: true, status: true } },
+        professional: { select: { id: true, businessName: true, logoUrl: true, category: true, status: true, isOpen: true } },
+        driver:       { select: { id: true, status: true, isAvailable: true, vehicleType: true } },
       },
     });
 
@@ -70,8 +70,8 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { phone },
       include: {
-        professional: { select: { id: true, businessName: true, status: true, isOpen: true } },
-        driver:       { select: { id: true, status: true } },
+        professional: { select: { id: true, businessName: true, logoUrl: true, category: true, status: true, isOpen: true } },
+        driver:       { select: { id: true, status: true, isAvailable: true, vehicleType: true } },
       },
     });
     if (!user?.pinHash) throw new BadRequestException('PIN not set');

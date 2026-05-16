@@ -46,12 +46,37 @@ export class ProfessionalsService {
       where: { id, status: 'VALIDATED' },
       include: {
         products: { where: { isAvailable: true }, include: { category: true } },
-        reviews: { include: { reviewer: { select: { name: true, avatarUrl: true } } }, take: 10, orderBy: { createdAt: 'desc' } },
+        reviews: {
+          include: { reviewer: { select: { name: true, avatarUrl: true } } },
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+        },
+        _count: { select: { reviews: true } },
       },
     });
     if (!prof) throw new NotFoundException('Establishment not found');
-    const avgRating = prof.reviews.length ? prof.reviews.reduce((s, r) => s + (r.professionalRating ?? 0), 0) / prof.reviews.length : 0;
-    return { data: { ...prof, avgRating: Math.round(avgRating * 10) / 10 } };
+
+    // Note moyenne sur l'ensemble des reviews (pas seulement les 10 dernières).
+    const ratingAgg = await this.prisma.review.aggregate({
+      where: { professionalId: id },
+      _avg: { professionalRating: true },
+    });
+    const avgRating = ratingAgg._avg.professionalRating ?? 0;
+
+    // Délai de livraison moyen depuis la config plateforme, sinon valeur par défaut.
+    const deliveryConfig = await this.prisma.platformConfig.findUnique({ where: { key: 'delivery' } });
+    const deliveryDefaults = (deliveryConfig?.value as any) ?? {};
+
+    return {
+      data: {
+        ...prof,
+        // Champs aplatis pour le mobile
+        avgRating: Math.round(avgRating * 10) / 10,
+        reviewCount: prof._count.reviews,
+        deliveryTimeMin: deliveryDefaults.defaultTimeMin ?? 25,
+        deliveryFee: deliveryDefaults.defaultFee ?? 0,
+      },
+    };
   }
 
   async getFavoriteDrivers(userId: string) {

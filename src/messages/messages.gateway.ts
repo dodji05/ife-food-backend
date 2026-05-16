@@ -1,14 +1,37 @@
-import { WebSocketGateway, WebSocketServer, SubscribeMessage, MessageBody, ConnectedSocket } from '@nestjs/websockets';
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
+  OnGatewayConnection,
+  WsException,
+} from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { MessagesService } from './messages.service';
+import { WsJwtGuard } from '../common/guards/ws-jwt.guard';
 
-@WebSocketGateway({ namespace: '/messages', cors: { origin: '*' } })
-export class MessagesGateway {
+@WebSocketGateway({
+  namespace: '/messages',
+  cors: { origin: process.env.FRONTEND_URL ?? false, credentials: true },
+})
+export class MessagesGateway implements OnGatewayConnection {
   @WebSocketServer() server: Server;
-  constructor(private messagesService: MessagesService) {}
+
+  constructor(
+    private messagesService: MessagesService,
+    private wsJwtGuard: WsJwtGuard,
+  ) {}
+
+  handleConnection(client: Socket) {
+    this.wsJwtGuard.authenticate(client);
+  }
 
   @SubscribeMessage('join')
   handleJoin(@MessageBody() data: { conversationId: string }, @ConnectedSocket() client: Socket) {
+    const user = (client.handshake as any).user;
+    if (!user) throw new WsException('Unauthorized');
+    // TODO: vérifier que l'utilisateur fait bien partie de la conversation
     client.join(data.conversationId);
   }
 
@@ -17,14 +40,9 @@ export class MessagesGateway {
     @MessageBody() data: { conversationId: string; content: string },
     @ConnectedSocket() client: Socket,
   ) {
-    // SECURITY: never trust senderId from the client payload — read it from the
-    // authenticated socket handshake data (set by a WS auth guard / middleware).
-    const senderId: string = (client.handshake as any).user?.id ?? (client.handshake.auth as any)?.userId;
-    if (!senderId) {
-      client.emit('error', { message: 'Unauthorized' });
-      return;
-    }
-    const message = await this.messagesService.sendMessage(senderId, data.conversationId, data.content);
+    const user = (client.handshake as any).user;
+    if (!user) throw new WsException('Unauthorized');
+    const message = await this.messagesService.sendMessage(user.id, data.conversationId, data.content);
     this.server.to(data.conversationId).emit('message', message);
     return message;
   }

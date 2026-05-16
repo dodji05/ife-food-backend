@@ -27,6 +27,18 @@ export class DriversController {
     return this.driversService.getDashboard(user.id);
   }
 
+  @Get('me/active-missions')
+  @ApiOperation({ summary: 'List ongoing deliveries (PICKED_UP / IN_DELIVERY)' })
+  getActiveMissions(@CurrentUser() user: any) {
+    return this.driversService.getActiveMissions(user.id);
+  }
+
+  @Get('me/earnings')
+  @ApiOperation({ summary: 'List driver earnings (paginated)' })
+  getEarnings(@CurrentUser() user: any) {
+    return this.driversService.getEarnings(user.id);
+  }
+
   @Patch('me')
   updateProfile(@CurrentUser() user: any, @Body() dto: UpdateDriverDto) {
     return this.driversService.updateProfile(user.id, dto);

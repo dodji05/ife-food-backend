@@ -23,6 +23,9 @@ export class AuthController {
   @Public()
   @Post('otp/verify')
   @HttpCode(HttpStatus.OK)
+  // Limite brute-force : 10 essais / minute / IP (l'OtpService applique aussi
+  // un compteur d'attempts par sessionId).
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Verify OTP code and login/register' })
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto.phone, dto.code, dto.sessionId, dto.role);
