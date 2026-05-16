@@ -70,7 +70,8 @@ jobs:
             cd /home/debian/PROJETS/Mouka/ife-food-backend
             
             echo "📥 Pulling latest code..."
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             
             echo "📦 Installing dependencies..."
             npm install --legacy-peer-deps
