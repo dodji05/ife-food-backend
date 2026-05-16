@@ -36,13 +36,13 @@ export class AuthService {
     let user = await this.prisma.user.findUnique({ where: { phone } });
 
     if (!user) {
-      // New user — create with pending status
+      // New user — CLIENT actif immédiatement, PRO/DRIVER en attente de validation
       user = await this.prisma.user.create({
         data: {
           phone,
           phoneCountry: phone.substring(0, 4),
           role: role as any,
-          status: 'PENDING',
+          status: role === 'CLIENT' ? 'ACTIVE' : 'PENDING',
         },
       });
     }
@@ -57,7 +57,7 @@ export class AuthService {
     });
 
     const tokens = await this.generateTokens(user.id, user.role);
-    return { user: fullUser, ...tokens, isNewUser: !user.name };
+    return { user: fullUser, ...tokens, isNewUser: !user.pinHash };
   }
 
   /** Set/Verify PIN */
