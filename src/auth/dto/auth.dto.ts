@@ -26,7 +26,3 @@ export class VerifyPinDto {
 export class Verify2faDto {
   @ApiProperty() @IsString() @Length(6, 6) code: string;
 }
-
-export class RefreshTokenDto {
-  @ApiProperty() @IsString() @IsNotEmpty() refreshToken: string;
-}

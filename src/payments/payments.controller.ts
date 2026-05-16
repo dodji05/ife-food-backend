@@ -21,14 +21,9 @@ export class PaymentsController {
   @Post('webhooks/:gateway')
   @Public()
   @ApiOperation({ summary: 'Receive payment gateway webhooks' })
-  webhook(
-    @Param('gateway') gateway: string,
-    @Req() req: Request,
-    @Headers('stripe-signature') stripeSig: string,
-    @Headers('x-kkiapay-signature') kkiaSig: string,
-  ) {
+  webhook(@Param('gateway') gateway: string, @Req() req: Request, @Headers('stripe-signature') sig: string) {
+    // Pass raw body (Buffer) for Stripe signature verification; fallback to parsed body for other gateways
     const payload = (req as any).rawBody ?? req.body;
-    const sig = stripeSig || kkiaSig || '';
     return this.paymentsService.handleWebhook(gateway, payload, sig);
   }
 

@@ -1,9 +1,7 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
 import { DriversService } from './drivers.service';
 import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto } from './dto/driver.dto';
 
@@ -56,29 +54,5 @@ export class DriversController {
   @ApiOperation({ summary: 'Update delivery status' })
   updateDeliveryStatus(@CurrentUser() user: any, @Param('orderId') orderId: string, @Body('status') status: string, @Body('confirmPhoto') photo?: string) {
     return this.driversService.updateDeliveryStatus(user.id, orderId, status, photo);
-  }
-  @Get('me/active-missions')
-  @UseGuards(RolesGuard)
-  @Roles('DRIVER')
-  @ApiOperation({ summary: 'Get all active delivery missions' })
-  getActiveMissions(@CurrentUser() user: any) {
-    return this.driversService.getActiveMissions(user.id);
-  }
-
-  @Get('me/earnings')
-  @ApiOperation({ summary: 'Get driver earnings history' })
-  getEarnings(@CurrentUser() user: any) {
-    return this.driversService.getEarnings(user.id);
-  }
-
-  @Patch(':id/capacity')
-  @UseGuards(RolesGuard)
-  @Roles('ADMIN')
-  @ApiOperation({ summary: 'Admin: update driver max concurrent deliveries' })
-  updateCapacity(
-    @Param('id') driverId: string,
-    @Body('maxConcurrentDeliveries') max: number,
-  ) {
-    return this.driversService.updateCapacity(driverId, max);
   }
 }

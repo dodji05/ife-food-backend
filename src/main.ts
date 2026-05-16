@@ -16,22 +16,8 @@ async function bootstrap() {
   const port = configService.get<number>('PORT', 3000);
   const nodeEnv = configService.get<string>('NODE_ENV', 'development');
 
-  // Security headers
-  app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
-        connectSrc: ["'self'"],
-        frameSrc: ["'none'"],
-        objectSrc: ["'none'"],
-        upgradeInsecureRequests: [],
-      },
-    },
-    crossOriginEmbedderPolicy: false,
-  }));
+  // Security
+  app.use(helmet());
   const frontendUrl = configService.get<string>('FRONTEND_URL');
   if (!frontendUrl && nodeEnv === 'production') {
     throw new Error('FRONTEND_URL doit être défini en production');

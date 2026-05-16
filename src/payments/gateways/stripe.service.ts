@@ -7,7 +7,7 @@ export class StripeService {
   private stripe: Stripe;
 
   constructor(private config: ConfigService) {
-    this.stripe = new Stripe(config.get('STRIPE_SECRET_KEY', ''), { apiVersion: '2024-06-20' });
+    this.stripe = new Stripe(config.get('STRIPE_SECRET_KEY', ''), { apiVersion: '2023-08-16' });
   }
 
   async createPaymentIntent(amount: number, currency: string, orderId: string) {

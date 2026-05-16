@@ -23,7 +23,7 @@ export class AuthService {
     const isProd = this.config.get('NODE_ENV') === 'production';
     return {
       sessionId,
-      // En production le champ est absent — en dev/staging il est exposé pour les tests
+      // Exposé uniquement hors production pour faciliter les tests
       ...(!isProd && { otp: code }),
     };
   }
@@ -34,9 +34,9 @@ export class AuthService {
     if (!session) throw new UnauthorizedException('Invalid or expired OTP');
 
     let user = await this.prisma.user.findUnique({ where: { phone } });
-    const isNew = !user;
 
     if (!user) {
+      // New user — create with pending status
       user = await this.prisma.user.create({
         data: {
           phone,
@@ -47,14 +47,8 @@ export class AuthService {
       });
     }
 
-    // Recharger avec les relations pour que le mobile puisse router correctement
-    const fullUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-      include: { professional: true, driver: true },
-    });
-
     const tokens = await this.generateTokens(user.id, user.role);
-    return { user: fullUser, ...tokens, isNewUser: isNew || !user.name };
+    return { user, ...tokens, isNewUser: !user.name };
   }
 
   /** Set/Verify PIN */
@@ -64,35 +58,18 @@ export class AuthService {
   }
 
   async verifyPin(phone: string, pin: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { phone },
-      include: { professional: true, driver: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { phone } });
     if (!user?.pinHash) throw new BadRequestException('PIN not set');
     const valid = await bcrypt.compare(pin, user.pinHash);
     if (!valid) throw new UnauthorizedException('Invalid PIN');
-    const tokens = await this.generateTokens(user.id, user.role);
-    return { user, ...tokens };
+    return this.generateTokens(user.id, user.role);
   }
 
-  /** Refresh token — vérifie le refresh token et génère une nouvelle paire */
-  async refreshToken(refreshTokenString: string) {
-    try {
-      const payload = this.jwtService.verify<{ sub: string; role: string }>(
-        refreshTokenString,
-        { secret: this.config.get('JWT_REFRESH_SECRET') },
-      );
-      const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-      if (!user) throw new NotFoundException('User not found');
-      return this.generateTokens(user.id, user.role);
-    } catch {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-  }
-
-  /** Logout — côté serveur stateless, les tokens expirent naturellement */
-  async logout(_userId: string) {
-    return { message: 'Déconnexion réussie' };
+  /** Refresh token */
+  async refreshToken(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.generateTokens(user.id, user.role);
   }
 
   /** Admin 2FA */
