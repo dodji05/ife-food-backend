@@ -47,8 +47,17 @@ export class AuthService {
       });
     }
 
+    // Récupère les relations professional/driver pour le routage côté app
+    const fullUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      include: {
+        professional: { select: { id: true, businessName: true, status: true, isOpen: true } },
+        driver:       { select: { id: true, status: true } },
+      },
+    });
+
     const tokens = await this.generateTokens(user.id, user.role);
-    return { user, ...tokens, isNewUser: !user.name };
+    return { user: fullUser, ...tokens, isNewUser: !user.name };
   }
 
   /** Set/Verify PIN */
@@ -58,18 +67,26 @@ export class AuthService {
   }
 
   async verifyPin(phone: string, pin: string) {
-    const user = await this.prisma.user.findUnique({ where: { phone } });
+    const user = await this.prisma.user.findUnique({
+      where: { phone },
+      include: {
+        professional: { select: { id: true, businessName: true, status: true, isOpen: true } },
+        driver:       { select: { id: true, status: true } },
+      },
+    });
     if (!user?.pinHash) throw new BadRequestException('PIN not set');
     const valid = await bcrypt.compare(pin, user.pinHash);
     if (!valid) throw new UnauthorizedException('Invalid PIN');
-    return this.generateTokens(user.id, user.role);
+    const tokens = await this.generateTokens(user.id, user.role);
+    return { user, ...tokens };
   }
 
   /** Refresh token */
   async refreshToken(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
-    return this.generateTokens(user.id, user.role);
+    const tokens = await this.generateTokens(user.id, user.role);
+    return { ...tokens };
   }
 
   /** Admin 2FA */
