@@ -58,7 +58,7 @@ jobs:
             echo "🔄 Starting Deployment..."
             echo "================================"
             
-            cd /var/www/ife-food-backend
+            cd /home/debian/PROJETS/Mouka/ife-food-backend
             
             echo "📥 Pulling latest code..."
             git pull origin main

@@ -25,5 +25,5 @@ build/
 .DS_Store
 Thumbs.db
 
-# Prisma
-prisma/migrations/
+# Prisma — NE PAS ignorer les migrations (nécessaires pour prisma migrate deploy en prod)
+# prisma/migrations/

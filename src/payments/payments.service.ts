@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from './gateways/stripe.service';
 import { PaypalService } from './gateways/paypal.service';
@@ -61,9 +62,20 @@ export class PaymentsService {
         if (event.type === 'payment_intent.succeeded') await this.confirmPayment(event.data.object.metadata.orderId, event.data.object.id);
         if (event.type === 'payment_intent.payment_failed') await this.failPayment(event.data.object.metadata.orderId);
         break;
-      case PaymentGatewayName.KKIAPAY:
+      case PaymentGatewayName.KKIAPAY: {
+        const kkiSecret = this.config.get<string>('KKIAPAY_SECRET', '');
+        if (kkiSecret && signature) {
+          const body = typeof payload === 'string' ? payload : JSON.stringify(payload);
+          const expected = createHmac('sha256', kkiSecret).update(body).digest('hex');
+          const sigBuffer = Buffer.from(signature);
+          const expBuffer = Buffer.from(expected);
+          if (sigBuffer.length !== expBuffer.length || !timingSafeEqual(sigBuffer, expBuffer)) {
+            throw new UnauthorizedException('Signature KKiaPay invalide');
+          }
+        }
         if (payload.status === 'SUCCESS') await this.confirmPayment(payload.reason, payload.transactionId);
         break;
+      }
     }
     return { received: true };
   }

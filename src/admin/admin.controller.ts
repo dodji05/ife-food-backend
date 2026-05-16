@@ -3,13 +3,14 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { AdminGuard } from '../common/guards/admin.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth('JWT')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminGuard)
 @Roles('ADMIN')
 @Controller('admin')
 export class AdminController {
@@ -24,6 +25,12 @@ export class AdminController {
   // VALIDATIONS
   @Get('pending/professionals')
   getPendingProfessionals() { return this.adminService.getPendingProfessionals(); }
+
+  @Get('pending/drivers')
+  getPendingDrivers() { return this.adminService.getPendingDrivers(); }
+
+  @Get('professionals')
+  getAllProfessionals(@Query() pagination: PaginationDto) { return this.adminService.getAllProfessionals(pagination); }
 
   @Patch('professionals/:id/validate')
   validateProfessional(@Param('id') id: string, @Body() body: { status: 'VALIDATED' | 'REJECTED'; note?: string }) {
@@ -64,6 +71,16 @@ export class AdminController {
   }
 
   // CONFIG
+  @Get('config/platform')
+  getPlatformConfig() { return this.adminService.getPlatformConfig(); }
+
+  @Put('config/platform')
+  setPlatformConfig(@Body() body: any) { return this.adminService.setPlatformConfig(body); }
+
+  // FIX: Endpoint GET manquant — le frontend admin en a besoin pour charger la commission courante
+  @Get('config/commission')
+  getCommission() { return this.adminService.getCommissionConfig(); }
+
   @Put('config/commission')
   setCommission(@Body() body: { type: 'PERCENTAGE' | 'FIXED_AMOUNT'; value: number; perCategory?: any }) {
     return this.adminService.setCommissionConfig(body.type, body.value, body.perCategory);
@@ -72,6 +89,12 @@ export class AdminController {
   @Put('config/payment-gateways')
   setGateways(@Body() body: Record<string, boolean>) {
     return this.adminService.setPaymentGateways(body);
+  }
+
+  // FIX: Endpoint manquant — appelé par le Header admin pour le badge de notifications
+  @Get('notifications/unread-count')
+  getNotificationsCount(@CurrentUser() user: any) {
+    return this.adminService.getAdminNotificationsCount(user.id);
   }
 
   // PROMO CODES
@@ -117,6 +140,18 @@ export class AdminController {
   broadcast(@Body() body: { title: string; body: string; role?: string; countries?: string[] }) {
     return this.adminService.broadcastNotification(body.title, body.body, body.role, body.countries);
   }
+
+  // CATALOGUE
+  @Get('catalogue/products')
+  getAllProducts(@Query() pagination: PaginationDto) { return this.adminService.getAllProducts(pagination); }
+
+  // PAYMENT STATS
+  @Get('payments/stats')
+  getPaymentStats() { return this.adminService.getPaymentStats(); }
+
+  // ANALYTICS
+  @Get('analytics')
+  getAnalytics() { return this.adminService.getAnalytics(); }
 
   // FINANCES
   @Get('finances/report')

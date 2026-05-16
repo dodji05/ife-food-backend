@@ -21,7 +21,7 @@ export class OtpService {
   }
 
   /** Generate and send OTP */
-  async createOtpSession(phone: string, channel: 'SMS' | 'WHATSAPP'): Promise<string> {
+  async createOtpSession(phone: string, channel: 'SMS' | 'WHATSAPP'): Promise<{ sessionId: string; code: string }> {
     // Check for existing pending session (rate limit)
     const recent = await this.prisma.otpSession.findFirst({
       where: { phone, verified: false, createdAt: { gte: new Date(Date.now() - 60000) } },
@@ -51,7 +51,7 @@ export class OtpService {
 
     // Send OTP via channel
     await this.sendOtp(phone, code, channel);
-    return sessionId;
+    return { sessionId, code };
   }
 
   /** Verify OTP code */

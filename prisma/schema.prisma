@@ -2,12 +2,12 @@
 // PostgreSQL Database Schema
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ─── ENUMS ───────────────────────────────────
@@ -305,6 +305,7 @@ model Driver {
   zoneCountry      String?
   zoneRadiusKm     Float        @default(10)
   isAvailable      Boolean      @default(false)
+  maxConcurrentDeliveries Int      @default(1)   // Nombre max de missions simultanées (1 = comportement actuel)
   adminNote        String?
   validatedAt      DateTime?
   createdAt        DateTime     @default(now())
@@ -316,7 +317,6 @@ model Driver {
   reviews          Review[]
   transactions     Transaction[]
   favoritedBy      ProfessionalFavoriteDriver[]
-  orders           Order[]
 
   @@map("drivers")
 }
@@ -419,7 +419,6 @@ model Order {
 
   client              User           @relation("ClientOrders", fields: [clientId], references: [id])
   professional        Professional   @relation("ProfessionalOrders", fields: [professionalId], references: [id])
-  driver              Driver?        @relation(fields: [driverId], references: [id])
   items               OrderItem[]
   payment             Payment?
   delivery            Delivery?

@@ -1,0 +1,131 @@
+## ifè FOOD — Render Blueprint
+## Déploiement : Backend API + Base PostgreSQL
+## Doc : https://render.com/docs/blueprint-spec
+
+databases:
+  - name: ife-food-db
+    databaseName: ife_food
+    user: ife_food
+    plan: free
+    region: frankfurt
+
+services:
+  - type: web
+    name: ife-food-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    repo: https://github.com/dodji05/ife-food-backend
+
+    buildCommand: npm install && npx prisma generate && npm run build
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: node dist/main
+
+    healthCheckPath: /api/v1/config/banners
+
+    envVars:
+      # ── Application ─────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: FRONTEND_URL
+        value: https://ife-food-admin.onrender.com
+
+      # ── Base de données (injectée automatiquement) ──────────
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ife-food-db
+          property: connectionString
+
+      # ── Redis (créer un compte Upstash.com gratuit) ─────────
+      - key: REDIS_URL
+        sync: false   # à renseigner manuellement dans le dashboard Render
+
+      # ── JWT (générés automatiquement par Render) ────────────
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 30d
+
+      # ── OTP ─────────────────────────────────────────────────
+      - key: OTP_CHANNEL
+        value: SMS
+      - key: OTP_EXPIRY_MINUTES
+        value: 5
+
+      # ── Twilio ──────────────────────────────────────────────
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+
+      # ── WhatsApp ─────────────────────────────────────────────
+      - key: WHATSAPP_API_URL
+        value: https://graph.facebook.com/v18.0
+      - key: WHATSAPP_PHONE_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+
+      # ── Stripe ──────────────────────────────────────────────
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+
+      # ── PayPal ──────────────────────────────────────────────
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_MODE
+        value: sandbox
+
+      # ── KKiaPay ─────────────────────────────────────────────
+      - key: KKIAPAY_PRIVATE_KEY
+        sync: false
+      - key: KKIAPAY_SECRET
+        sync: false
+      - key: KKIAPAY_SANDBOX
+        value: true
+
+      # ── Firebase FCM ────────────────────────────────────────
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_ACCESS_TOKEN
+        sync: false
+
+      # ── Cloudinary ──────────────────────────────────────────
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      # ── APIs externes ────────────────────────────────────────
+      - key: EXCHANGE_RATE_API_URL
+        value: https://v6.exchangerate-api.com/v6
+      - key: EXCHANGE_RATE_API_KEY
+        sync: false
+      - key: WEATHER_API_URL
+        value: https://api.openweathermap.org/data/2.5
+      - key: WEATHER_API_KEY
+        sync: false
+
+      # ── Rate limiting ────────────────────────────────────────
+      - key: THROTTLE_TTL
+        value: 60
+      - key: THROTTLE_LIMIT
+        value: 100
+
+      # ── Admin ────────────────────────────────────────────────
+      - key: ADMIN_PHONE
+        sync: false

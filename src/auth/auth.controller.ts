@@ -1,7 +1,7 @@
-import { Controller, Post, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { SendOtpDto, VerifyOtpDto, SetPinDto, VerifyPinDto, Verify2faDto } from './dto/auth.dto';
+import { SendOtpDto, VerifyOtpDto, SetPinDto, VerifyPinDto, Verify2faDto, RefreshTokenDto } from './dto/auth.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -23,6 +23,7 @@ export class AuthController {
   @Public()
   @Post('otp/verify')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Verify OTP code and login/register' })
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto.phone, dto.code, dto.sessionId, dto.role);
@@ -51,5 +52,22 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify 2FA TOTP code (admins)' })
   verify2fa(@CurrentUser() user: any, @Body() dto: Verify2faDto) {
     return this.authService.verify2fa(user.id, dto.code);
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refreshToken(dto.refreshToken);
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout current session' })
+  logout(@CurrentUser() user: any) {
+    return this.authService.logout(user.id);
   }
 }
