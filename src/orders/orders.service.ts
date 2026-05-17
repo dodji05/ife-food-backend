@@ -100,10 +100,24 @@ export class OrdersService {
   }
 
   async getProfessionalOrders(professionalId: string, pagination: PaginationDto) {
+    // Relations enrichies pour la vue PRO :
+    //   - client : nom + tel + avatar (bouton appel + avatar carte)
+    //   - driver.user : nom + tel + avatar (bandeau livreur assigné)
+    //   - items.product : nom multilingue + imageUrl (thumbnail item)
+    //   - payment : statut paiement (badge optionnel)
     const [orders, total] = await Promise.all([
       this.prisma.order.findMany({
         where: { professionalId },
-        include: { client: { select: { name: true, phone: true } }, items: { include: { product: true } } },
+        include: {
+          client: { select: { name: true, firstName: true, phone: true, avatarUrl: true } },
+          driver: {
+            include: {
+              user: { select: { name: true, firstName: true, phone: true, avatarUrl: true } },
+            },
+          },
+          items: { include: { product: true } },
+          payment: true,
+        },
         orderBy: { createdAt: 'desc' },
         skip: pagination.skip,
         take: pagination.limit,
@@ -118,9 +132,11 @@ export class OrdersService {
       where: { id: orderId },
       include: {
         items: { include: { product: true } },
-        client: { select: { name: true, firstName: true, phone: true } },
+        client: { select: { name: true, firstName: true, phone: true, avatarUrl: true } },
         professional: { select: { businessName: true, address: true, phone: true, lat: true, lng: true } },
-        driver: { include: { user: { select: { name: true, firstName: true, avatarUrl: true } } } },
+        // `phone` ajouté : le mobile PRO affiche un bouton "Appeler le livreur"
+        // depuis le détail de commande, donc le tel est requis dans la réponse.
+        driver: { include: { user: { select: { name: true, firstName: true, phone: true, avatarUrl: true } } } },
         delivery: true,
         payment: true,
       },
