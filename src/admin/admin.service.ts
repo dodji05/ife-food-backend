@@ -96,7 +96,15 @@ export class AdminService {
   // ─── ORDERS MANAGEMENT ────────────────────
   async getAllOrders(filters: any, pagination: PaginationDto) {
     const where: any = {};
-    if (filters.status) where.status = filters.status;
+    // Le frontend peut envoyer "PAID,IN_PREPARATION,IN_DELIVERY" (CSV).
+    // Prisma attend un enum unique OU { in: [...] } pour plusieurs valeurs.
+    if (filters.status) {
+      const statuses = String(filters.status)
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+      where.status = statuses.length === 1 ? statuses[0] : { in: statuses };
+    }
     if (filters.country) where.deliveryCountry = filters.country;
     if (filters.from && filters.to) where.createdAt = { gte: new Date(filters.from), lte: new Date(filters.to) };
 
