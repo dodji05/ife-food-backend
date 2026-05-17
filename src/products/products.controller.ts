@@ -1,5 +1,7 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -48,6 +50,22 @@ export class ProductsController {
   @ApiOperation({ summary: 'Toggle product availability' })
   toggle(@Param('id') id: string, @CurrentUser() user: any) {
     return this.productsService.toggleAvailability(user.id, id);
+  }
+
+  @Post(':id/image')
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload product image (multipart field name: image)' })
+  // Le mobile envoie le fichier sous le champ `image` (FormData).
+  // memoryStorage : le buffer est passé directement à Cloudinary, pas de
+  // fichier temporaire sur disque (cohérent avec /uploads/avatar).
+  @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
+  uploadImage(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.productsService.uploadImage(user.id, id, file);
   }
 
   @Get('search')

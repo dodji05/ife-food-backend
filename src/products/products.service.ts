@@ -1,11 +1,15 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { CreateProductDto, UpdateProductDto, CreateCategoryDto } from './dto/product.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private uploads: UploadsService,
+  ) {}
 
   async createCategory(userId: string, dto: CreateCategoryDto) {
     const prof = await this.prisma.professional.findUnique({ where: { userId } });
@@ -50,6 +54,39 @@ export class ProductsService {
     if (!product) throw new NotFoundException();
     if (product.professional.userId !== userId) throw new ForbiddenException();
     return this.prisma.product.update({ where: { id: productId }, data: { isAvailable: !product.isAvailable } });
+  }
+
+  /**
+   * Upload une image produit (multipart) vers Cloudinary et persiste l'URL.
+   * - Vérifie que le produit appartient bien au pro authentifié.
+   * - Délégué à UploadsService.uploadFile() qui valide mime (jpg/png/webp)
+   *   et taille (max 10 Mo) côté infra.
+   * - Réponse compatible avec le mobile : `{ data: { imageUrl } }`
+   *   (le mobile lit `data.imageUrl ?? data.url`).
+   */
+  async uploadImage(userId: string, productId: string, file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Aucune image fournie');
+
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: { professional: true },
+    });
+    if (!product) throw new NotFoundException('Produit introuvable');
+    if (product.professional.userId !== userId) {
+      throw new ForbiddenException("Ce produit ne vous appartient pas");
+    }
+
+    // Upload vers Cloudinary, folder dédié pour faciliter la purge/quota.
+    const imageUrl = await this.uploads.uploadFile(file, 'ife-food/products');
+
+    // Persiste l'URL sur le produit. Pas de soft-delete de l'ancienne image —
+    // Cloudinary la conservera (purge à programmer côté admin si besoin).
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: { imageUrl },
+    });
+
+    return { imageUrl };
   }
 
   async getProducts(professionalId: string, pagination: PaginationDto) {
