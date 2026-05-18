@@ -161,22 +161,15 @@ export class OrdersService {
       },
     });
 
-    // Map order status to notification type
-    const statusToNotification: Record<string, string> = {
-      ACCEPTED: 'ORDER_ACCEPTED',
-      REJECTED: 'ORDER_CANCELLED',
-      IN_PREPARATION: 'ORDER_IN_PREPARATION',
-      READY_FOR_PICKUP: 'ORDER_READY',
-      DRIVER_ASSIGNED: 'ORDER_DRIVER_ASSIGNED',
-      PICKED_UP: 'ORDER_IN_DELIVERY',
-      IN_DELIVERY: 'ORDER_IN_DELIVERY',
-      CANCELLED: 'ORDER_CANCELLED',
-      DELIVERED: 'ORDER_DELIVERED',
-    };
-    const notificationType = statusToNotification[dto.status];
-    if (notificationType) {
-      await this.notifications.sendOrderNotification(orderId, notificationType as any);
-    }
+    // BUG FIX : la version précédente mappait dto.status -> 'ORDER_*' puis
+    // passait cette string custom à sendOrderNotification(). Or ce dernier
+    // matche sur les STATUS réels (ACCEPTED, IN_PREPARATION, …) dans son
+    // dict statusMessages -> tout retombait sur 'undefined' -> aucune notif
+    // n'était jamais envoyée. On passe maintenant dto.status direct.
+    // 'REJECTED' (status custom du DTO) est mappé sur 'CANCELLED' qui est
+    // le seul status FCM destiné au client en cas de refus.
+    const fcmStatus = dto.status === 'REJECTED' ? 'CANCELLED' : dto.status;
+    await this.notifications.sendOrderNotification(orderId, fcmStatus as any);
 
     return { data: updated };
   }

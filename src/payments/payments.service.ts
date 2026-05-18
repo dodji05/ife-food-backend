@@ -4,6 +4,7 @@ import { StripeService } from './gateways/stripe.service';
 import { PaypalService } from './gateways/paypal.service';
 import { KkiapayService } from './gateways/kkiapay.service';
 import { ConfigService } from '@nestjs/config';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export enum PaymentGatewayName {
   STRIPE = 'STRIPE',
@@ -20,6 +21,7 @@ export class PaymentsService {
     private paypal: PaypalService,
     private kkiapay: KkiapayService,
     private config: ConfigService,
+    private notifications: NotificationsService,
   ) {}
 
   async initiatePayment(orderId: string, gateway: string) {
@@ -73,6 +75,15 @@ export class PaymentsService {
       this.prisma.payment.update({ where: { orderId }, data: { status: 'SUCCESS' as any, gatewayRef } }),
       this.prisma.order.update({ where: { id: orderId }, data: { paymentStatus: 'SUCCESS' as any, status: 'PAID' as any } }),
     ]);
+
+    // Notification PAID -> envoyée au pro pour qu'il sache qu'une nouvelle
+    // commande l'attend (déclencheur clé du workflow pro côté mobile).
+    // Best-effort : on n'attend PAS un éventuel throw — un push raté ne doit
+    // pas faire échouer la confirmation du paiement webhook (sinon Stripe
+    // rejouera le webhook indéfiniment).
+    this.notifications.sendOrderNotification(orderId, 'PAID').catch(() => {
+      /* déjà loggé dans NotificationsService */
+    });
   }
 
   async failPayment(orderId: string) {
