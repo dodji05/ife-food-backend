@@ -17,18 +17,64 @@ export class ProfessionalsService {
   }
 
   async getMyProfile(userId: string) {
-    const prof = await this.prisma.professional.findUnique({
-      where: { userId },
+    // Upsert (idempotent) : si le user vient juste de finir l'OTP+PIN avec
+    // role=PROFESSIONAL et n'a pas encore complété /professionals/register,
+    // on lui crée un record placeholder. Ça permet à toute l'app pro
+    // (dashboard, toggleOpen, schedule, etc.) de fonctionner immédiatement
+    // au lieu de 404. L'utilisateur complétera ses infos via 'Modifier mes
+    // informations'. Catégorie/pays par défaut = RESTAURANT/BJ.
+    const prof = await this.prisma.professional.upsert({
+      where:  { userId },
+      update: {},
+      create: {
+        userId,
+        businessName: 'Mon établissement',
+        category:     'RESTAURANT',
+        address:      '',
+        city:         '',
+        country:      'BJ',
+        lat:          0,
+        lng:          0,
+        status:       'PENDING',
+        deliveryRadiusKm: 10,
+      },
       include: { documents: true },
     });
-    if (!prof) throw new NotFoundException('Professional profile not found');
     return { data: prof };
   }
 
   async updateProfile(userId: string, dto: UpdateProfessionalDto) {
-    const prof = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!prof) throw new NotFoundException('Profile not found');
-    return this.prisma.professional.update({ where: { userId }, data: dto });
+    // UPSERT au lieu de UPDATE strict.
+    //
+    // Contexte : le flow auth (OTP+PIN) crée un User avec role=PROFESSIONAL
+    // MAIS ne crée PAS automatiquement un record Professional associé
+    // (le endpoint /professionals/register n'est jamais appelé en pratique).
+    // Du coup, le 1er PATCH /professionals/me retournait 404 et empêchait
+    // l'utilisateur de remplir son profil métier.
+    //
+    // Maintenant : si pas de record -> on le crée avec les valeurs envoyées
+    // + des defaults pour les champs Prisma required (category/address/city/
+    // country/lat/lng/businessName). L'utilisateur complète ensuite via
+    // l'écran 'Modifier mes informations'.
+    return this.prisma.professional.upsert({
+      where:  { userId },
+      update: { ...dto },
+      create: {
+        userId,
+        businessName: dto.businessName ?? 'Mon établissement',
+        category:     'RESTAURANT', // catégorie par défaut, éditable plus tard
+        address:      dto.address ?? '',
+        city:         dto.city    ?? '',
+        country:      'BJ',  // Bénin par défaut, à généraliser si multi-pays
+        lat:          dto.lat ?? 0,
+        lng:          dto.lng ?? 0,
+        status:       'PENDING',
+        description:  dto.description,
+        phone:        dto.phone,
+        email:        dto.email,
+        deliveryRadiusKm: dto.deliveryRadiusKm ?? 10,
+      },
+    });
   }
 
   async toggleOpen(userId: string) {
@@ -107,8 +153,22 @@ export class ProfessionalsService {
   }
 
   async getDashboard(userId: string) {
+    // Pas de upsert ici (le faire dans getMyProfile/updateProfile suffit) :
+    // si l'utilisateur n'a vraiment aucun record pro, on retourne des stats
+    // vides plutôt qu'une 404 qui casserait l'écran dashboard mobile.
     const prof = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!prof) throw new NotFoundException();
+    if (!prof) {
+      return {
+        data: {
+          revenue: { today: 0, week: 0, month: 0 },
+          orders:  { today: 0, pending: 0, total: 0 },
+          avgRating: 0, reviewCount: 0,
+          revenueByDay: [],
+          topProducts:  [],
+          recentReviews: [],
+        },
+      };
+    }
 
     const today = new Date(); today.setHours(0,0,0,0);
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
