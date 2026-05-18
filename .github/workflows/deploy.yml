@@ -76,11 +76,17 @@ jobs:
             echo "📦 Installing dependencies..."
             npm install --legacy-peer-deps
 
-            echo "🗄️ Syncing database + régénération Prisma client (AVANT build)..."
-            # prisma db push auto-régénère le client par défaut (Prisma 7+).
-            # Doit tourner AVANT npm run build sinon TS ne voit pas les nouveaux
-            # modèles (cf. bug du run du 18/05 avec UserAddress / ProductCategory.professional).
+            echo "🗄️ Syncing database schema..."
             npx prisma db push
+
+            echo "🔧 Generating Prisma client (Prisma 7+ ne le fait PLUS auto après db push)..."
+            # Sans cette étape, le client TS reste stale -> build échoue sur
+            # les nouveaux modèles (UserAddress, ProductCategory.professional...).
+            # Confirmé par le run du 18/05 où 'db push' réussit mais build crash.
+            # On supprime aussi le client cached pour forcer une vraie regen
+            # (Prisma 7 a parfois un cache agressif dans node_modules).
+            rm -rf node_modules/.prisma node_modules/@prisma/client
+            npx prisma generate
 
             echo "🏗️ Building..."
             npm run build
