@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
-import { CreateProductDto, UpdateProductDto, CreateCategoryDto } from './dto/product.dto';
+import { CreateProductDto, UpdateProductDto, CreateCategoryDto, UpdateCategoryDto, ReorderCategoriesDto } from './dto/product.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -19,6 +19,65 @@ export class ProductsService {
 
   async getCategories(professionalId: string) {
     return this.prisma.productCategory.findMany({ where: { professionalId }, orderBy: { sortOrder: 'asc' }, include: { products: { where: { isAvailable: true } } } });
+  }
+
+  // ── Catégories : update + delete + reorder ─────────────────────────────────
+  // Toutes les mutations vérifient l'ownership (la catégorie doit appartenir
+  // au pro authentifié) pour éviter qu'un user manipule les catégories d'autrui.
+
+  async updateCategory(userId: string, categoryId: string, dto: UpdateCategoryDto) {
+    const cat = await this.prisma.productCategory.findUnique({
+      where: { id: categoryId },
+      include: { professional: true },
+    });
+    if (!cat) throw new NotFoundException('Catégorie introuvable');
+    if (cat.professional.userId !== userId) throw new ForbiddenException();
+    return this.prisma.productCategory.update({ where: { id: categoryId }, data: dto });
+  }
+
+  async deleteCategory(userId: string, categoryId: string) {
+    const cat = await this.prisma.productCategory.findUnique({
+      where: { id: categoryId },
+      include: { professional: true },
+    });
+    if (!cat) throw new NotFoundException('Catégorie introuvable');
+    if (cat.professional.userId !== userId) throw new ForbiddenException();
+    // Avant delete : on détache tous les produits qui référencent cette
+    // catégorie (categoryId -> null). Sinon Prisma rejetterait à cause de
+    // la FK. UX : le produit n'est pas supprimé, juste 'décategorisé'.
+    await this.prisma.$transaction([
+      this.prisma.product.updateMany({
+        where: { categoryId },
+        data:  { categoryId: null },
+      }),
+      this.prisma.productCategory.delete({ where: { id: categoryId } }),
+    ]);
+    return { ok: true };
+  }
+
+  async reorderCategories(userId: string, dto: ReorderCategoriesDto) {
+    // Récupère toutes les catégories du pro pour vérifier ownership avant
+    // d'appliquer les updates. Évite qu'un user puisse réordonner les
+    // catégories d'un autre pro en glissant des ids étrangers.
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException('Profile not found');
+    const owned = await this.prisma.productCategory.findMany({
+      where: { professionalId: prof.id }, select: { id: true },
+    });
+    const ownedIds = new Set(owned.map((c) => c.id));
+    const safeItems = dto.items.filter((i) => ownedIds.has(i.id));
+
+    if (safeItems.length === 0) return { updated: 0 };
+
+    // Transaction : tous les sortOrder en une seule fois. Si l'un échoue,
+    // aucun n'est appliqué (cohérence).
+    await this.prisma.$transaction(
+      safeItems.map((i) => this.prisma.productCategory.update({
+        where: { id: i.id },
+        data:  { sortOrder: i.sortOrder },
+      })),
+    );
+    return { updated: safeItems.length };
   }
 
   async createProduct(userId: string, dto: CreateProductDto) {

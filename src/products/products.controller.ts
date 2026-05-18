@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { ProductsService } from './products.service';
-import { CreateProductDto, UpdateProductDto, CreateCategoryDto } from './dto/product.dto';
+import { CreateProductDto, UpdateProductDto, CreateCategoryDto, UpdateCategoryDto, ReorderCategoriesDto } from './dto/product.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('products')
@@ -24,6 +24,28 @@ export class ProductsController {
   @Public()
   getCategories(@Param('professionalId') professionalId: string) {
     return this.productsService.getCategories(professionalId);
+  }
+
+  // Reorder DOIT être déclaré AVANT `categories/:id` sinon NestJS route
+  // 'reorder' vers le param :id (string "reorder") -> 404 cascade.
+  @Patch('categories/reorder')
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Bulk reorder categories' })
+  reorderCategories(@CurrentUser() user: any, @Body() dto: ReorderCategoriesDto) {
+    return this.productsService.reorderCategories(user.id, dto);
+  }
+
+  @Patch('categories/:id')
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
+  updateCategory(@Param('id') id: string, @CurrentUser() user: any, @Body() dto: UpdateCategoryDto) {
+    return this.productsService.updateCategory(user.id, id, dto);
+  }
+
+  @Delete('categories/:id')
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Delete category (products are decategorized, not deleted)' })
+  deleteCategory(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.productsService.deleteCategory(user.id, id);
   }
 
   @Post()

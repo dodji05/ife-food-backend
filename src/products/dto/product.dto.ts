@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, IsObject, IsNotEmptyObject } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsBoolean, IsObject, IsNotEmptyObject, IsArray, ArrayNotEmpty } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // ⚠️ main.ts : ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }).
@@ -11,6 +11,20 @@ export class CreateCategoryDto {
   @IsNotEmptyObject() name: any;
   @ApiPropertyOptional() @IsOptional() @IsString() icon?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() sortOrder?: number;
+}
+
+export class UpdateCategoryDto {
+  @ApiPropertyOptional() @IsOptional() @IsObject() name?: any;
+  @ApiPropertyOptional() @IsOptional() @IsString() icon?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() sortOrder?: number;
+}
+
+// Bulk reorder : [{id, sortOrder}, ...]. Le service applique chaque update
+// dans une transaction Prisma. Tableau requis non vide.
+export class ReorderCategoriesDto {
+  @ApiProperty({ description: '[{id: "...", sortOrder: 0}, ...]' })
+  @IsArray() @ArrayNotEmpty()
+  items: { id: string; sortOrder: number }[];
 }
 
 export class CreateProductDto {
