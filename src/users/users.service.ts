@@ -17,7 +17,13 @@ export class UsersService {
       const existing = await this.prisma.user.findFirst({ where: { email: dto.email, id: { not: userId } } });
       if (existing) throw new ConflictException('Email already in use');
     }
-    return this.prisma.user.update({ where: { id: userId }, data: dto });
+    // Cast 'as any' nécessaire : le DTO type 'lang' comme string générique
+    // mais Prisma le typed enum Language. La valeur est déjà validée par
+    // @IsIn(['fr','en',...]) sur le DTO -> safe à passer tel quel.
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: dto as any,
+    });
   }
 
   async updateLanguage(userId: string, dto: UpdateLangDto) {

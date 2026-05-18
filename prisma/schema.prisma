@@ -296,6 +296,7 @@ model Professional {
 
   user               User                @relation(fields: [userId], references: [id])
   products           Product[]
+  productCategories  ProductCategory[]
   orders             Order[]             @relation("ProfessionalOrders")
   documents          Document[]
   reviews            Review[]
@@ -385,7 +386,11 @@ model ProductCategory {
   sortOrder      Int       @default(0)
   createdAt      DateTime  @default(now())
   products       Product[]
+  // Relation explicite vers Professional pour permettre include({professional:true})
+  // dans le service updateCategory/deleteCategory (ownership check).
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
 
+  @@index([professionalId])
   @@map("product_categories")
 }
 
