@@ -75,12 +75,15 @@ jobs:
             
             echo "📦 Installing dependencies..."
             npm install --legacy-peer-deps
-            
+
+            echo "🗄️ Syncing database schema (avant generate)..."
+            npx prisma db push --skip-generate
+
+            echo "🔧 Generating Prisma client (avec nouveau schema)..."
+            npx prisma generate
+
             echo "🏗️ Building..."
             npm run build
-            
-            echo "🗄️ Syncing database..."
-            npx prisma db push
             
             echo "🔄 Restarting application..."
             pm2 restart ife-food-api
