@@ -19,6 +19,7 @@ import { MessagesModule } from './messages/messages.module';
 import { AdminModule } from './admin/admin.module';
 import { GeoModule } from './geo/geo.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { UserAddressesModule } from './user-addresses/user-addresses.module';
 import { ConfigAppModule } from './config/config.module';
 import { TasksModule } from './tasks/tasks.module';
 
@@ -53,6 +54,7 @@ import { TasksModule } from './tasks/tasks.module';
     AdminModule,
     GeoModule,
     UploadsModule,
+    UserAddressesModule,
     ConfigAppModule,
     TasksModule,
   ],
