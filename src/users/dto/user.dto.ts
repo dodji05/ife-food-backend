@@ -12,6 +12,11 @@ export class UpdateProfileDto {
   // PATCH /users/me {lang:'xx'} sans passer par l'endpoint dédié /lang.
   @ApiPropertyOptional() @IsOptional() @IsIn(['fr','en','es','de','ru','ar','zh'])
   lang?: string;
+  // Permet au sélecteur pays/devise (country_currency_picker) de PATCH en
+  // une fois sans passer par l'endpoint /country dédié. ISO 3166-1 alpha-2.
+  @ApiPropertyOptional({ example: 'BJ' }) @IsOptional() @IsString() countryCode?: string;
+  // ISO 4217 (3 lettres). Pour fallback international : USD.
+  @ApiPropertyOptional({ example: 'XOF' }) @IsOptional() @IsString() currency?: string;
 }
 
 export class UpdateLangDto {
