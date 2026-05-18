@@ -20,6 +20,7 @@ import { AdminModule } from './admin/admin.module';
 import { GeoModule } from './geo/geo.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { UserAddressesModule } from './user-addresses/user-addresses.module';
+import { PromoModule } from './promo/promo.module';
 import { ConfigAppModule } from './config/config.module';
 import { TasksModule } from './tasks/tasks.module';
 
@@ -55,6 +56,7 @@ import { TasksModule } from './tasks/tasks.module';
     GeoModule,
     UploadsModule,
     UserAddressesModule,
+    PromoModule,
     ConfigAppModule,
     TasksModule,
   ],
