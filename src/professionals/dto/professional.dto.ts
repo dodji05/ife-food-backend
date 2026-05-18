@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, IsIn, IsObject } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateProfessionalDto {
@@ -29,6 +29,8 @@ export class UpdateProfessionalDto {
 }
 
 export class UpdateOpeningHoursDto {
+  // @IsObject() obligatoire sinon ValidationPipe whitelist:true le strip
+  // silencieusement -> dto.openingHours = undefined -> Prisma update no-op.
   @ApiProperty({ description: '{ mon: { open: "08:00", close: "22:00" }, ... }' })
-  openingHours: any;
+  @IsObject() openingHours: any;
 }
