@@ -50,6 +50,17 @@ export class AdminService {
     });
   }
 
+  // ─── DRIVERS PENDING ──────────────────────
+  /// Symétrique de getPendingProfessionals — utilisé par l'écran admin
+  /// mobile (onglet 'Livreurs' dans /admin/pending).
+  async getPendingDrivers() {
+    return this.prisma.driver.findMany({
+      where: { status: 'PENDING' },
+      include: { user: { select: { name: true, phone: true, email: true } }, documents: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async validateProfessional(id: string, status: 'VALIDATED' | 'REJECTED', note?: string) {
     const prof = await this.prisma.professional.findUnique({ where: { id }, include: { user: true } });
     if (!prof) throw new NotFoundException();

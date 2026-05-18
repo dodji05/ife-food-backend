@@ -25,6 +25,9 @@ export class AdminController {
   @Get('pending/professionals')
   getPendingProfessionals() { return this.adminService.getPendingProfessionals(); }
 
+  @Get('pending/drivers')
+  getPendingDrivers() { return this.adminService.getPendingDrivers(); }
+
   @Patch('professionals/:id/validate')
   validateProfessional(@Param('id') id: string, @Body() body: { status: 'VALIDATED' | 'REJECTED'; note?: string }) {
     return this.adminService.validateProfessional(id, body.status, body.note);
