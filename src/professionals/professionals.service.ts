@@ -152,7 +152,10 @@ export class ProfessionalsService {
       this.prisma.order.aggregate({ where: { professionalId: prof.id, createdAt: { gte: monthAgo }, status: 'DELIVERED' }, _sum: { totalAmount: true } }),
       this.prisma.order.count({ where: { professionalId: prof.id, status: { in: ['PAID','ACCEPTED','IN_PREPARATION'] } } }),
       this.prisma.order.count({ where: { professionalId: prof.id, status: 'DELIVERED' } }),
-      this.prisma.review.aggregate({ where: { professionalId: prof.id }, _avg: { rating: true }, _count: true }),
+      // Le schéma Review a deux colonnes : professionalRating (note pour le
+      // restaurant) et driverRating (note pour le livreur). Côté dashboard
+      // pro, seule professionalRating est pertinente.
+      this.prisma.review.aggregate({ where: { professionalId: prof.id }, _avg: { professionalRating: true }, _count: true }),
       this.prisma.orderItem.groupBy({ by: ['productId'], where: { order: { professionalId: prof.id, status: 'DELIVERED' } }, _sum: { quantity: true }, orderBy: { _sum: { quantity: 'desc' } }, take: 5 }),
       this.prisma.review.findMany({ where: { professionalId: prof.id }, orderBy: { createdAt: 'desc' }, take: 5, include: { reviewer: { select: { name: true, avatarUrl: true } } } }),
     ]);
@@ -183,7 +186,9 @@ export class ProfessionalsService {
           total: totalOrders,
         },
         // Note moyenne arrondie 1 décimale + nb d'avis (utile pour le badge).
-        avgRating: ratingAgg._avg.rating ? Number(ratingAgg._avg.rating.toFixed(1)) : 0,
+        avgRating: ratingAgg._avg.professionalRating
+            ? Number(ratingAgg._avg.professionalRating.toFixed(1))
+            : 0,
         reviewCount: ratingAgg._count,
         revenueByDay,
         topProducts,
