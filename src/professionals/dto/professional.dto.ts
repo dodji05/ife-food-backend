@@ -26,6 +26,11 @@ export class UpdateProfessionalDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() deliveryRadiusKm?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
+  // Whitelist URLs assignées après upload via /uploads/avatar.
+  // Sans ces décorateurs, ValidationPipe(whitelist:true) les strippait
+  // silencieusement -> le PATCH logo/cover était un no-op pour le mobile.
+  @ApiPropertyOptional() @IsOptional() @IsString() logoUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() coverImageUrl?: string;
 }
 
 export class UpdateOpeningHoursDto {
