@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GeoService } from '../geo/geo.service';
@@ -7,10 +8,13 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private geo: GeoService,
+    private config: ConfigService,
   ) {}
 
   async createOrder(clientId: string, dto: CreateOrderDto) {
@@ -81,6 +85,55 @@ export class OrdersService {
       },
       include: { items: { include: { product: true } }, client: true, professional: true },
     });
+
+    // ── Mode TEST : auto-confirme le paiement immédiatement ────────────────
+    // Activé via env var PAYMENT_AUTO_CONFIRM=true (à mettre dans .env du
+    // VPS pour les tests). En PROD : laisser absent ou false -> le webhook
+    // gateway réel (Stripe/KKIAPAY/PayPal/FedaPay) confirmera le paiement.
+    //
+    // Toute la logique paiement reste intacte (gateways services + webhook
+    // controller). Ce flag court-circuite juste l'attente du webhook pour
+    // permettre de tester le flow end-to-end sans setup gateway complet.
+    //
+    // Effets de bord (gérés par confirmPayment, déjà câblé) :
+    //   - Payment row passe à SUCCESS
+    //   - Order status passe à PAID
+    //   - Notification push 'Nouvelle commande !' envoyée au pro (FCM)
+    if (this.config.get('PAYMENT_AUTO_CONFIRM') === 'true') {
+      this.logger.warn(`[TEST MODE] Auto-confirming payment for order ${order.id}`);
+      // Crée d'abord la row Payment (sinon confirmPayment échoue sur l'update).
+      // En PROD c'est PaymentsService.initiatePayment qui crée cette row à
+      // l'appel POST /payments/:orderId/initiate/:gw.
+      await this.prisma.payment.upsert({
+        where: { orderId: order.id },
+        create: {
+          orderId: order.id,
+          amount: order.totalAmount,
+          currency: order.currency,
+          gateway: order.paymentMethod as any,
+          status: 'PENDING' as any,
+        },
+        update: {},
+      });
+      // Réutilise la logique standard de confirmation (transaction + notif).
+      await this.prisma.$transaction([
+        this.prisma.payment.update({
+          where: { orderId: order.id },
+          data: { status: 'SUCCESS' as any, gatewayRef: `TEST_${order.id}` },
+        }),
+        this.prisma.order.update({
+          where: { id: order.id },
+          data: { paymentStatus: 'SUCCESS' as any, status: 'PAID' as any },
+        }),
+      ]);
+      // Notif PAID au pro (best-effort, ne bloque pas la création d'order).
+      this.notifications.sendOrderNotification(order.id, 'PAID').catch(() => {});
+      // Re-fetch pour retourner l'order avec le nouveau status PAID
+      return this.prisma.order.findUnique({
+        where: { id: order.id },
+        include: { items: { include: { product: true } }, client: true, professional: true },
+      });
+    }
 
     return order;
   }
