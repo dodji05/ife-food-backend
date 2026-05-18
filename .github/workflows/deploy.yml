@@ -76,11 +76,11 @@ jobs:
             echo "📦 Installing dependencies..."
             npm install --legacy-peer-deps
 
-            echo "🗄️ Syncing database schema (avant generate)..."
-            npx prisma db push --skip-generate
-
-            echo "🔧 Generating Prisma client (avec nouveau schema)..."
-            npx prisma generate
+            echo "🗄️ Syncing database + régénération Prisma client (AVANT build)..."
+            # prisma db push auto-régénère le client par défaut (Prisma 7+).
+            # Doit tourner AVANT npm run build sinon TS ne voit pas les nouveaux
+            # modèles (cf. bug du run du 18/05 avec UserAddress / ProductCategory.professional).
+            npx prisma db push
 
             echo "🏗️ Building..."
             npm run build
