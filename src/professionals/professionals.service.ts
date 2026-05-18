@@ -114,19 +114,78 @@ export class ProfessionalsService {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const [todayOrders, weekOrders, monthOrders, pending, topProducts, recentReviews] = await Promise.all([
+    // ── 7-day revenue series : 7 aggregates parallèles ─────────────────────
+    // Format de sortie : [{date: 'YYYY-MM-DD', revenue: 12500, orders: 3}, …]
+    // Indexé oldest → newest pour permettre au mobile de tracer un LineChart
+    // gauche → droite sans tri.
+    const days: Date[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      days.push(d);
+    }
+    const dayAggregates = await Promise.all(
+      days.map((dayStart) => {
+        const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+        return this.prisma.order.aggregate({
+          where: {
+            professionalId: prof.id,
+            status: 'DELIVERED',
+            createdAt: { gte: dayStart, lt: dayEnd },
+          },
+          _sum: { totalAmount: true },
+          _count: true,
+        });
+      }),
+    );
+    const revenueByDay = days.map((d, i) => ({
+      date: d.toISOString().substring(0, 10), // YYYY-MM-DD
+      revenue: dayAggregates[i]._sum.totalAmount ?? 0,
+      orders: dayAggregates[i]._count,
+    }));
+
+    const [
+      todayOrders, weekOrders, monthOrders, pending,
+      totalOrders, ratingAgg, topProductsAgg, recentReviews,
+    ] = await Promise.all([
       this.prisma.order.aggregate({ where: { professionalId: prof.id, createdAt: { gte: today }, status: 'DELIVERED' }, _sum: { totalAmount: true }, _count: true }),
       this.prisma.order.aggregate({ where: { professionalId: prof.id, createdAt: { gte: weekAgo }, status: 'DELIVERED' }, _sum: { totalAmount: true } }),
       this.prisma.order.aggregate({ where: { professionalId: prof.id, createdAt: { gte: monthAgo }, status: 'DELIVERED' }, _sum: { totalAmount: true } }),
       this.prisma.order.count({ where: { professionalId: prof.id, status: { in: ['PAID','ACCEPTED','IN_PREPARATION'] } } }),
+      this.prisma.order.count({ where: { professionalId: prof.id, status: 'DELIVERED' } }),
+      this.prisma.review.aggregate({ where: { professionalId: prof.id }, _avg: { rating: true }, _count: true }),
       this.prisma.orderItem.groupBy({ by: ['productId'], where: { order: { professionalId: prof.id, status: 'DELIVERED' } }, _sum: { quantity: true }, orderBy: { _sum: { quantity: 'desc' } }, take: 5 }),
       this.prisma.review.findMany({ where: { professionalId: prof.id }, orderBy: { createdAt: 'desc' }, take: 5, include: { reviewer: { select: { name: true, avatarUrl: true } } } }),
     ]);
 
+    // Enrichir topProducts avec les infos produit (nom multilingue + image)
+    // pour que le mobile puisse afficher la liste sans appel additionnel.
+    const productIds = topProductsAgg.map((t) => t.productId);
+    const products = productIds.length > 0
+      ? await this.prisma.product.findMany({ where: { id: { in: productIds } } })
+      : [];
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    const topProducts = topProductsAgg.map((t) => ({
+      productId: t.productId,
+      quantitySold: t._sum.quantity ?? 0,
+      product: productMap.get(t.productId) ?? null,
+    }));
+
     return {
       data: {
-        revenue: { today: todayOrders._sum.totalAmount ?? 0, week: weekOrders._sum.totalAmount ?? 0, month: monthOrders._sum.totalAmount ?? 0 },
-        orders: { today: todayOrders._count, pending },
+        revenue: {
+          today: todayOrders._sum.totalAmount ?? 0,
+          week: weekOrders._sum.totalAmount ?? 0,
+          month: monthOrders._sum.totalAmount ?? 0,
+        },
+        orders: {
+          today: todayOrders._count,
+          pending,
+          total: totalOrders,
+        },
+        // Note moyenne arrondie 1 décimale + nb d'avis (utile pour le badge).
+        avgRating: ratingAgg._avg.rating ? Number(ratingAgg._avg.rating.toFixed(1)) : 0,
+        reviewCount: ratingAgg._count,
+        revenueByDay,
         topProducts,
         recentReviews,
       },
