@@ -235,6 +235,10 @@ export class OrdersService {
       ]);
       // Notif PAID au pro (best-effort, ne bloque pas la création d'order).
       this.notifications.sendOrderNotification(order.id, 'PAID').catch(() => {});
+      // Sprint C - emit PAID sur la room order_<id>. Le tracking_screen
+      // client commence à écouter dès qu'il s'ouvre, donc cet event lui
+      // permet de voir le statut bouger en mode test.
+      this.deliveriesGateway.emitOrderStatus(order.id, 'PAID');
 
       // Sprint B - le dispatch driver est maintenant déclenché à
       // READY_FOR_PICKUP (cf updateOrderStatus), plus à PAID. Ça respecte
@@ -245,12 +249,29 @@ export class OrdersService {
       // bypasser cette étape via env var PRO_AUTO_ACCEPT=true.
       // En MODE TEST + PRO_AUTO_ACCEPT, on simule le flux complet du pro
       // (ACCEPTED -> IN_PREPARATION -> READY_FOR_PICKUP) puis on dispatch.
+      // On émet aussi les events intermédiaires pour que le tracking
+      // client voit toutes les étapes même en mode test.
       if (this.config.get('PRO_AUTO_ACCEPT') === 'true') {
         this.logger.warn(`[TEST MODE] PRO_AUTO_ACCEPT actif: simule cycle pro complet pour order ${order.id}`);
+        // Petites pauses entre les transitions pour que le client ait le
+        // temps de voir chaque étape dans le tracking_screen (sinon les
+        // 3 events arrivent en <50ms et l'UI ne show que la dernière).
         await this.prisma.order.update({
-          where: { id: order.id },
-          data: { status: 'READY_FOR_PICKUP' as any },
+          where: { id: order.id }, data: { status: 'ACCEPTED' as any },
         });
+        this.deliveriesGateway.emitOrderStatus(order.id, 'ACCEPTED');
+        await new Promise((r) => setTimeout(r, 800));
+
+        await this.prisma.order.update({
+          where: { id: order.id }, data: { status: 'IN_PREPARATION' as any },
+        });
+        this.deliveriesGateway.emitOrderStatus(order.id, 'IN_PREPARATION');
+        await new Promise((r) => setTimeout(r, 800));
+
+        await this.prisma.order.update({
+          where: { id: order.id }, data: { status: 'READY_FOR_PICKUP' as any },
+        });
+        this.deliveriesGateway.emitOrderStatus(order.id, 'READY_FOR_PICKUP');
         this.dispatchNewMission(order.id);
       }
       // Re-fetch pour retourner l'order avec le nouveau status
