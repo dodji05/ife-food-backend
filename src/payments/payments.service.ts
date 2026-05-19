@@ -5,6 +5,7 @@ import { PaypalService } from './gateways/paypal.service';
 import { KkiapayService } from './gateways/kkiapay.service';
 import { ConfigService } from '@nestjs/config';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
 
 export enum PaymentGatewayName {
   STRIPE = 'STRIPE',
@@ -22,7 +23,58 @@ export class PaymentsService {
     private kkiapay: KkiapayService,
     private config: ConfigService,
     private notifications: NotificationsService,
+    private deliveriesGateway: DeliveriesGateway,
   ) {}
+
+  /**
+   * Construit le payload Mission et broadcast `new_mission` à tous les
+   * drivers en ligne. Méthode best-effort : tout throw est avalé pour ne
+   * pas casser le flow paiement.
+   */
+  private async dispatchNewMission(orderId: string) {
+    try {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          professional: { select: { businessName: true, address: true, lat: true, lng: true } },
+          items: { include: { product: true } },
+        },
+      });
+      if (!order) return;
+
+      // Distance haversine (km) prof -> client
+      const toRad = (d: number) => (d * Math.PI) / 180;
+      const R = 6371;
+      const dLat = toRad(order.deliveryLat - order.professional.lat);
+      const dLng = toRad(order.deliveryLng - order.professional.lng);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(order.professional.lat)) *
+          Math.cos(toRad(order.deliveryLat)) *
+          Math.sin(dLng / 2) ** 2;
+      const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      // Estimation : 3 min/km + 5 min buffer (calibrable plus tard).
+      const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
+
+      this.deliveriesGateway.emitNewMission({
+        orderId: order.id,
+        professionalName: order.professional.businessName,
+        professionalAddress: order.professional.address,
+        professionalLat: order.professional.lat,
+        professionalLng: order.professional.lng,
+        deliveryAddress: order.deliveryAddress,
+        deliveryLat: order.deliveryLat,
+        deliveryLng: order.deliveryLng,
+        deliveryFee: order.deliveryFee,
+        currency: order.currency,
+        distanceKm,
+        estimatedMinutes,
+        items: order.items,
+      });
+    } catch {
+      /* silencieux : la mission sera de toute façon récupérable via REST */
+    }
+  }
 
   async initiatePayment(orderId: string, gateway: string) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId }, include: { client: true } });
@@ -84,6 +136,11 @@ export class PaymentsService {
     this.notifications.sendOrderNotification(orderId, 'PAID').catch(() => {
       /* déjà loggé dans NotificationsService */
     });
+
+    // Broadcast temps réel `new_mission` aux drivers en ligne (room
+    // `drivers_online`). Le premier qui accepte verrouille la mission
+    // côté backend (POST /drivers/missions/:orderId/accept).
+    this.dispatchNewMission(orderId);
   }
 
   async failPayment(orderId: string) {

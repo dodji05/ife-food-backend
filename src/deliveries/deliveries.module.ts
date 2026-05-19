@@ -17,6 +17,8 @@ import { WsJwtGuard } from '../common/guards/ws-jwt.guard';
   ],
   controllers: [DeliveriesController],
   providers: [DeliveriesService, DeliveriesGateway, WsJwtGuard],
-  exports: [DeliveriesService],
+  // Export du gateway : OrdersService / PaymentsService peuvent émettre
+  // l'évènement temps réel `new_mission` aux livreurs en ligne.
+  exports: [DeliveriesService, DeliveriesGateway],
 })
 export class DeliveriesModule {}

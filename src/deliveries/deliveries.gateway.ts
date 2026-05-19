@@ -27,9 +27,51 @@ export class DeliveriesGateway implements OnGatewayConnection {
     private config: ConfigService,
   ) {}
 
-  /** Authentifie chaque connexion entrante. Disconnect si token invalide. */
+  /**
+   * Authentifie chaque connexion entrante. Si le user est un DRIVER,
+   * on le fait rejoindre la room `drivers_online` afin de pouvoir
+   * broadcaster les nouvelles missions à tous les livreurs en ligne
+   * via un seul emit (cf. emitNewMission).
+   */
   handleConnection(client: Socket) {
-    this.wsJwtGuard.authenticate(client);
+    const ok = this.wsJwtGuard.authenticate(client);
+    if (!ok) return;
+    const user = (client.handshake as any).user;
+    if (user?.role === 'DRIVER') {
+      client.join('drivers_online');
+      client.join(`driver_${user.id}`);
+    }
+  }
+
+  /**
+   * Émet un évènement `new_mission` à tous les drivers connectés (room
+   * `drivers_online`). Si `driverUserId` est fourni, l'émission est ciblée
+   * sur ce driver uniquement (room `driver_<userId>`).
+   *
+   * Le payload est volontairement plat pour matcher le modèle Mission
+   * côté mobile (Mission.fromOrderJson est tolérant aux champs manquants).
+   */
+  emitNewMission(payload: {
+    orderId: string;
+    professionalName: string;
+    professionalAddress?: string;
+    professionalLat?: number;
+    professionalLng?: number;
+    deliveryAddress: string;
+    deliveryLat?: number;
+    deliveryLng?: number;
+    deliveryFee: number;
+    currency?: string;
+    distanceKm?: number;
+    estimatedMinutes?: number;
+    items?: any[];
+    driverUserId?: string;
+  }) {
+    if (!this.server) return;
+    const target = payload.driverUserId
+      ? `driver_${payload.driverUserId}`
+      : 'drivers_online';
+    this.server.to(target).emit('new_mission', payload);
   }
 
   /** Le livreur émet sa position. On vérifie que le driver émetteur est bien lui. */

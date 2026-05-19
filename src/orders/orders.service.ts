@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GeoService } from '../geo/geo.service';
+import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
 import { CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
@@ -15,7 +16,51 @@ export class OrdersService {
     private notifications: NotificationsService,
     private geo: GeoService,
     private config: ConfigService,
+    private deliveriesGateway: DeliveriesGateway,
   ) {}
+
+  /** Broadcast `new_mission` aux drivers en ligne (best-effort). */
+  private async dispatchNewMission(orderId: string) {
+    try {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          professional: { select: { businessName: true, address: true, lat: true, lng: true } },
+          items: { include: { product: true } },
+        },
+      });
+      if (!order) return;
+
+      const toRad = (d: number) => (d * Math.PI) / 180;
+      const dLat = toRad(order.deliveryLat - order.professional.lat);
+      const dLng = toRad(order.deliveryLng - order.professional.lng);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(order.professional.lat)) *
+          Math.cos(toRad(order.deliveryLat)) *
+          Math.sin(dLng / 2) ** 2;
+      const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
+
+      this.deliveriesGateway.emitNewMission({
+        orderId: order.id,
+        professionalName: order.professional.businessName,
+        professionalAddress: order.professional.address,
+        professionalLat: order.professional.lat,
+        professionalLng: order.professional.lng,
+        deliveryAddress: order.deliveryAddress,
+        deliveryLat: order.deliveryLat,
+        deliveryLng: order.deliveryLng,
+        deliveryFee: order.deliveryFee,
+        currency: order.currency,
+        distanceKm,
+        estimatedMinutes,
+        items: order.items,
+      });
+    } catch {
+      /* silencieux */
+    }
+  }
 
   async createOrder(clientId: string, dto: CreateOrderDto) {
     // Charger tous les produits en une seule requête (évite le pattern N+1)
@@ -128,6 +173,9 @@ export class OrdersService {
       ]);
       // Notif PAID au pro (best-effort, ne bloque pas la création d'order).
       this.notifications.sendOrderNotification(order.id, 'PAID').catch(() => {});
+      // Broadcast `new_mission` aux drivers en ligne (mode TEST inclut le
+      // dispatch livreur pour pouvoir tester le flow end-to-end sans webhook).
+      this.dispatchNewMission(order.id);
       // Re-fetch pour retourner l'order avec le nouveau status PAID
       return this.prisma.order.findUnique({
         where: { id: order.id },
