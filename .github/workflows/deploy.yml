@@ -82,10 +82,10 @@ jobs:
             echo "🔧 Generating Prisma client (Prisma 7+ ne le fait PLUS auto après db push)..."
             # Sans cette étape, le client TS reste stale -> build échoue sur
             # les nouveaux modèles (UserAddress, ProductCategory.professional...).
-            # Confirmé par le run du 18/05 où 'db push' réussit mais build crash.
-            # On supprime aussi le client cached pour forcer une vraie regen
-            # (Prisma 7 a parfois un cache agressif dans node_modules).
-            rm -rf node_modules/.prisma node_modules/@prisma/client
+            # On nuke UNIQUEMENT le dossier .prisma (client compilé), JAMAIS
+            # @prisma/client (le package npm lui-même) - sinon prisma generate
+            # échoue avec "Could not resolve @prisma/client" (confirmé run 18/05).
+            rm -rf node_modules/.prisma
             npx prisma generate
 
             echo "🏗️ Building..."
