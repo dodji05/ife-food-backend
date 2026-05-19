@@ -20,7 +20,10 @@ export class DriversService {
   ) {}
 
   async register(userId: string, dto: CreateDriverDto) {
-    return this.prisma.driver.create({ data: { ...dto, userId, vehicleType: dto.vehicleType as any, status: 'PENDING' } });
+    const created = await this.prisma.driver.create({
+      data: { ...dto, userId, vehicleType: dto.vehicleType as any, status: 'PENDING' },
+    });
+    return { data: created };
   }
 
   async getMyProfile(userId: string) {
@@ -30,18 +33,39 @@ export class DriversService {
   }
 
   async updateProfile(userId: string, dto: UpdateDriverDto) {
-    return this.prisma.driver.update({ where: { userId }, data: dto as any });
+    const updated = await this.prisma.driver.update({ where: { userId }, data: dto as any });
+    return { data: updated };
   }
 
   async toggleAvailability(userId: string) {
     const driver = await this.prisma.driver.findUnique({ where: { userId } });
     if (!driver) throw new NotFoundException();
+    // Refuse de passer ONLINE si le compte n'est pas encore VALIDATED.
+    // Avant : on bypassait cette check et le driver ONLINE pending
+    // pouvait recevoir des missions sans validation admin.
+    if (driver.status === 'PENDING' && !driver.isAvailable) {
+      throw new ForbiddenException(
+        'Votre compte doit être validé par l\'admin avant de passer en ligne');
+    }
     const newStatus = driver.isAvailable ? 'OFFLINE' : 'ONLINE';
-    return this.prisma.driver.update({ where: { userId }, data: { isAvailable: !driver.isAvailable, status: newStatus as any } });
+    const updated = await this.prisma.driver.update({
+      where: { userId },
+      data: { isAvailable: !driver.isAvailable, status: newStatus as any },
+    });
+    // Wrap dans { data } pour matcher le contrat des autres endpoints
+    // (le mobile parse res['data'] → sans wrap, Driver.fromJson crashe
+    // sur undefined et l'option ONLINE/OFFLINE ne marche pas).
+    return { data: updated };
   }
 
   async updateLocation(userId: string, dto: UpdateLocationDto) {
-    return this.prisma.driver.update({ where: { userId }, data: { currentLat: dto.lat, currentLng: dto.lng } });
+    const updated = await this.prisma.driver.update({
+      where: { userId },
+      data: { currentLat: dto.lat, currentLng: dto.lng },
+    });
+    // Wrap dans { data } pour cohérence (utilisé par PATCH /drivers/me/location
+    // toutes les 5 secondes côté mobile).
+    return { data: updated };
   }
 
   async getAvailableDrivers(lat: number, lng: number, radiusKm: number = 5) {
