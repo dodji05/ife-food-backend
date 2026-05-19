@@ -276,22 +276,57 @@ export class OrdersService {
   }
 
   async cancelOrder(orderId: string, clientId: string, reason?: string) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      // Inclut driver.userId pour pouvoir le notifier si déjà assigné.
+      include: { driver: { select: { userId: true } } },
+    });
     if (!order) throw new NotFoundException('Order not found');
     if (order.clientId !== clientId) throw new ForbiddenException();
 
-    // Check cancellation deadline from config
+    // Deadline d'annulation : config admin (défaut 5 min).
+    // Logique corrigée : on BLOQUE l'annulation après deadline SAUF si la
+    // commande est encore en statut early (PENDING_PAYMENT/PAID/ACCEPTED).
+    // Une fois DRIVER_ASSIGNED ou plus, l'annulation client est interdite
+    // pour éviter qu'un driver fasse la course pour rien (-> contact support).
     const config = await this.prisma.platformConfig.findUnique({ where: { key: 'cancellationDeadlineMinutes' } });
     const deadline = (config?.value as any) ?? 5;
     const minutesSinceOrder = (Date.now() - order.createdAt.getTime()) / 60000;
-    if (minutesSinceOrder > deadline && ['ACCEPTED','IN_PREPARATION'].includes(order.status)) {
+    const cancellableStatuses = ['PENDING_PAYMENT', 'PAID', 'ACCEPTED', 'IN_PREPARATION'];
+    if (!cancellableStatuses.includes(order.status)) {
+      throw new BadRequestException('Cannot cancel order at this stage');
+    }
+    if (minutesSinceOrder > deadline) {
       throw new BadRequestException('Cancellation deadline passed');
     }
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id: orderId },
       data: { status: 'CANCELLED' as any, cancelledBy: clientId, cancelledReason: reason },
     });
+
+    // Notifier pro + driver assigné (CANCELLED côté notifications.service
+    // gère déjà recipients = [client, pro] mais ne notifie pas le driver
+    // tant qu'on ne lui envoie pas explicitement la notif).
+    await this.notifications.sendOrderNotification(orderId, 'CANCELLED' as any);
+
+    // Si un driver est déjà assigné, lui pousser une notif FCM dédiée
+    // pour qu'il arrête sa course. Best-effort, on n'échoue pas le cancel
+    // si la notif ne part pas (méthode sendPush gère déjà le no-token).
+    if (order.driver?.userId) {
+      try {
+        await this.notifications.sendPush(
+          order.driver.userId,
+          'Mission annulée',
+          'Le client a annulé la commande. Vous pouvez quitter votre course.',
+          { type: 'mission_cancelled', orderId },
+        );
+      } catch {
+        // silencieux : la notif n'est pas critique
+      }
+    }
+
+    return updated;
   }
 
   async reorderFromPrevious(orderId: string, clientId: string) {

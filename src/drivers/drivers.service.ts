@@ -61,7 +61,10 @@ export class DriversService {
 
     await this.prisma.order.update({ where: { id: orderId }, data: { driverId: driver.id, status: 'DRIVER_ASSIGNED' as any } });
     await this.prisma.delivery.create({ data: { orderId, driverId: driver.id } });
-    await this.notifications.sendOrderNotification(orderId, 'ORDER_DRIVER_ASSIGNED');
+    // Clé alignée sur statusMessages dans notifications.service.ts.
+    // Avant : 'ORDER_DRIVER_ASSIGNED' -> undefined -> return silencieux,
+    // donc le client n'était JAMAIS notifié de l'assignation du livreur.
+    await this.notifications.sendOrderNotification(orderId, 'DRIVER_ASSIGNED');
     return { success: true };
   }
 
@@ -87,7 +90,10 @@ export class DriversService {
       await this.prisma.order.update({ where: { id: orderId }, data: { status: 'DELIVERED' as any } });
       await this.creditAfterDelivery(orderId, driver.id);
     }
-    await this.notifications.sendOrderNotification(orderId, status === 'DELIVERED' ? 'ORDER_DELIVERED' : 'ORDER_IN_DELIVERY');
+    // Clés alignées sur statusMessages dans notifications.service.ts.
+    // Avant : 'ORDER_DELIVERED'/'ORDER_IN_DELIVERY' -> undefined -> aucune
+    // notif envoyée au client pendant toute la phase de livraison.
+    await this.notifications.sendOrderNotification(orderId, status === 'DELIVERED' ? 'DELIVERED' : 'IN_DELIVERY');
     return { success: true };
   }
 

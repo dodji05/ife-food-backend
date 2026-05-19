@@ -41,6 +41,17 @@ export class DeliveriesGateway implements OnGatewayConnection {
       client.join('drivers_online');
       client.join(`driver_${user.id}`);
     }
+    // Auto-join room professional_<userId> pour broadcaster les events
+    // côté pro (nouvelle commande, driver assigné, etc.) — évite au pro
+    // de poller GET /orders/professional toutes les X secondes.
+    if (user?.role === 'PROFESSIONAL') {
+      client.join(`professional_${user.id}`);
+    }
+    // Client auto-joint sa propre room user_<id> pour recevoir les
+    // events order_status sans besoin de track_order explicite.
+    if (user?.role === 'CLIENT') {
+      client.join(`user_${user.id}`);
+    }
   }
 
   /**
@@ -106,24 +117,56 @@ export class DeliveriesGateway implements OnGatewayConnection {
     @MessageBody() data: { orderId: string },
     @ConnectedSocket() socket: Socket,
   ) {
+    await this.joinOrderRoom(data.orderId, socket);
+  }
+
+  /**
+   * Alias de track_order — utilisé par le mobile driver après avoir accepté
+   * une mission (cf driver_provider.dart emit 'join_mission'). Permet au
+   * driver de recevoir les events de la room order_<id> (mises à jour de
+   * statut côté pro, annulation client, etc.) en plus de pouvoir émettre.
+   */
+  @SubscribeMessage('join_mission')
+  async handleJoinMission(
+    @MessageBody() data: { orderId: string },
+    @ConnectedSocket() socket: Socket,
+  ) {
+    await this.joinOrderRoom(data.orderId, socket);
+  }
+
+  /** Vérifie l'autorisation puis rejoint la room `order_<orderId>`. */
+  private async joinOrderRoom(orderId: string, socket: Socket) {
     const user = (socket.handshake as any).user;
     if (!user) throw new WsException('Unauthorized');
 
     const order = await this.prisma.order.findUnique({
-      where: { id: data.orderId },
-      select: { clientId: true, professionalId: true },
+      where: { id: orderId },
+      select: { clientId: true, professionalId: true, driverId: true },
     });
     if (!order) throw new WsException('Order not found');
 
-    // Seul le client, le pro associé ou un livreur peut tracker
-    const pro = await this.prisma.professional.findUnique({ where: { id: order.professionalId }, select: { userId: true } });
+    // Seul le client, le pro associé ou le driver assigné peut tracker.
+    // Un driver non assigné est autorisé tant qu'il a accepté la mission
+    // (pour qu'il puisse rejoindre dès l'accept côté mobile, avant que
+    // le state local ait refresh).
+    const pro = await this.prisma.professional.findUnique({
+      where: { id: order.professionalId }, select: { userId: true },
+    });
+    const driver = order.driverId
+      ? await this.prisma.driver.findUnique({
+          where: { id: order.driverId }, select: { userId: true },
+        })
+      : null;
     const isClient = order.clientId === user.id;
-    const isPro = pro?.userId === user.id;
-    const isDriver = user.role === 'DRIVER';
-    if (!isClient && !isPro && !isDriver) {
+    const isPro    = pro?.userId === user.id;
+    const isDriver = driver?.userId === user.id;
+    // Driver pas encore assigné mais avec rôle DRIVER : on tolère le join
+    // (sera bloqué côté backend à l'accept si pas légitime).
+    const isAnyDriver = user.role === 'DRIVER' && !order.driverId;
+    if (!isClient && !isPro && !isDriver && !isAnyDriver) {
       throw new WsException('Forbidden');
     }
 
-    socket.join(`order_${data.orderId}`);
+    socket.join(`order_${orderId}`);
   }
 }
