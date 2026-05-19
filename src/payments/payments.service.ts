@@ -137,10 +137,11 @@ export class PaymentsService {
       /* déjà loggé dans NotificationsService */
     });
 
-    // Broadcast temps réel `new_mission` aux drivers en ligne (room
-    // `drivers_online`). Le premier qui accepte verrouille la mission
-    // côté backend (POST /drivers/missions/:orderId/accept).
-    this.dispatchNewMission(orderId);
+    // Sprint B - dispatch driver déplacé de PAID -> READY_FOR_PICKUP
+    // (cf OrdersService.updateOrderStatus). Le pro doit d'abord accepter
+    // la commande et la préparer avant qu'un livreur soit cherché.
+    // En mode test PRO_AUTO_ACCEPT=true, le bypass est dans createOrder
+    // (n'a pas lieu d'être ici car le webhook réel implique un vrai pro).
   }
 
   async failPayment(orderId: string) {

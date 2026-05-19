@@ -55,15 +55,59 @@ export class DriversService {
     const driver = await this.prisma.driver.findUnique({ where: { userId } });
     if (!driver) throw new NotFoundException();
 
-    // Check for existing delivery to avoid unique constraint violation on orderId
-    const existing = await this.prisma.delivery.findUnique({ where: { orderId } });
-    if (existing) throw new ConflictException('A delivery already exists for this order');
+    // Vérifie le quota de missions actives. Le mobile a aussi cette limite
+    // (maxConcurrentDeliveries=3 par défaut) mais on protège côté backend
+    // contre une triche client ou un état désynchronisé.
+    const activeCount = await this.prisma.delivery.count({
+      where: {
+        driverId: driver.id,
+        status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any },
+      },
+    });
+    if (activeCount >= driver.maxConcurrentDeliveries) {
+      throw new ConflictException(
+        `Quota atteint (${driver.maxConcurrentDeliveries} missions actives max)`);
+    }
 
-    await this.prisma.order.update({ where: { id: orderId }, data: { driverId: driver.id, status: 'DRIVER_ASSIGNED' as any } });
-    await this.prisma.delivery.create({ data: { orderId, driverId: driver.id } });
+    // Race condition fix : on encapsule dans une transaction et on catch
+    // l'erreur Prisma P2002 (unique constraint sur orderId dans Delivery)
+    // pour la convertir en ConflictException 409 propre. Avant : 2 drivers
+    // qui acceptent en parallèle -> le 2e crashait sur P2002 brut côté CI.
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // L'order doit être en statut READY_FOR_PICKUP (ou ACCEPTED si on
+        // tolère une assignation anticipée). Bloque si déjà assigné.
+        const order = await tx.order.findUnique({
+          where: { id: orderId }, select: { status: true, driverId: true },
+        });
+        if (!order) throw new NotFoundException('Order not found');
+        if (order.driverId) {
+          throw new ConflictException('Mission already taken by another driver');
+        }
+        // Statuts autorisés pour acceptance par le driver. On reste large
+        // (PAID inclus) pour ne pas casser le mode test PAYMENT_AUTO_CONFIRM
+        // qui n'a pas forcément encore atteint READY_FOR_PICKUP.
+        const acceptable = ['PAID', 'ACCEPTED', 'IN_PREPARATION', 'READY_FOR_PICKUP'];
+        if (!acceptable.includes(order.status)) {
+          throw new ConflictException(`Cannot accept mission in status ${order.status}`);
+        }
+
+        await tx.order.update({
+          where: { id: orderId },
+          data: { driverId: driver.id, status: 'DRIVER_ASSIGNED' as any },
+        });
+        await tx.delivery.create({ data: { orderId, driverId: driver.id } });
+      });
+    } catch (e: any) {
+      // Prisma unique violation sur Delivery.orderId -> 409 propre.
+      if (e?.code === 'P2002') {
+        throw new ConflictException('Mission already taken by another driver');
+      }
+      throw e;
+    }
+
     // Clé alignée sur statusMessages dans notifications.service.ts.
-    // Avant : 'ORDER_DRIVER_ASSIGNED' -> undefined -> return silencieux,
-    // donc le client n'était JAMAIS notifié de l'assignation du livreur.
+    // Sans cet appel, le client ne serait jamais notifié de l'assignation.
     await this.notifications.sendOrderNotification(orderId, 'DRIVER_ASSIGNED');
     return { success: true };
   }

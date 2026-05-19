@@ -19,13 +19,26 @@ export class OrdersService {
     private deliveriesGateway: DeliveriesGateway,
   ) {}
 
-  /** Broadcast `new_mission` aux drivers en ligne (best-effort). */
+  /**
+   * Broadcast `new_mission` aux drivers ÉLIGIBLES.
+   *
+   * Sprint B - filtrage éligibilité côté backend (best-effort) :
+   *   - status='VALIDATED' (driver actif validé par admin)
+   *   - isAvailable=true (driver en mode ONLINE)
+   *   - quota maxConcurrentDeliveries non atteint
+   *   - zone : si driver.zoneCity match l'adresse delivery, on priorise.
+   *     Fallback : tous les drivers éligibles si aucun match géo.
+   *
+   * On émet ensuite individuellement sur la room driver_<userId> pour
+   * chaque driver éligible (vs broadcast aveugle sur drivers_online).
+   * Coût raisonnable car early stage : <50 drivers concurrents.
+   */
   private async dispatchNewMission(orderId: string) {
     try {
       const order = await this.prisma.order.findUnique({
         where: { id: orderId },
         include: {
-          professional: { select: { businessName: true, address: true, lat: true, lng: true } },
+          professional: { select: { businessName: true, address: true, lat: true, lng: true, city: true } },
           items: { include: { product: true } },
         },
       });
@@ -42,7 +55,7 @@ export class OrdersService {
       const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
 
-      this.deliveriesGateway.emitNewMission({
+      const payload = {
         orderId: order.id,
         professionalName: order.professional.businessName,
         professionalAddress: order.professional.address,
@@ -56,9 +69,56 @@ export class OrdersService {
         distanceKm,
         estimatedMinutes,
         items: order.items,
+      };
+
+      // Récupère les drivers éligibles : validated + available + quota OK.
+      const eligibleDrivers = await this.prisma.driver.findMany({
+        where: {
+          status: 'VALIDATED' as any,
+          isAvailable: true,
+        },
+        select: {
+          id: true, userId: true, zoneCity: true,
+          maxConcurrentDeliveries: true,
+          // Compte les missions actives pour appliquer le filtre quota.
+          _count: {
+            select: {
+              deliveries: {
+                where: {
+                  status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any },
+                },
+              },
+            },
+          },
+        },
       });
-    } catch {
-      /* silencieux */
+
+      const available = eligibleDrivers.filter(
+        (d) => d._count.deliveries < d.maxConcurrentDeliveries);
+
+      if (available.length === 0) {
+        this.logger.warn(`[dispatch] Aucun driver éligible pour order ${order.id}`);
+        return;
+      }
+
+      // Priorise les drivers de la même ville que le restaurant.
+      // Fallback : tous les drivers disponibles si aucun match géo.
+      const proCity = order.professional.city;
+      const sameCity = proCity
+        ? available.filter((d) => d.zoneCity && d.zoneCity === proCity)
+        : [];
+      const targets = sameCity.length > 0 ? sameCity : available;
+
+      this.logger.log(
+        `[dispatch] order ${order.id} -> ${targets.length} driver(s) eligible(s)` +
+        (sameCity.length > 0 ? ` (zone ${proCity})` : ' (tous, pas de match zone)'));
+
+      // Émission ciblée sur la room individuelle de chaque driver.
+      for (const d of targets) {
+        this.deliveriesGateway.emitNewMission({ ...payload, driverUserId: d.userId });
+      }
+    } catch (e) {
+      this.logger.error(`[dispatch] Erreur: ${e}`);
     }
   }
 
@@ -173,10 +233,25 @@ export class OrdersService {
       ]);
       // Notif PAID au pro (best-effort, ne bloque pas la création d'order).
       this.notifications.sendOrderNotification(order.id, 'PAID').catch(() => {});
-      // Broadcast `new_mission` aux drivers en ligne (mode TEST inclut le
-      // dispatch livreur pour pouvoir tester le flow end-to-end sans webhook).
-      this.dispatchNewMission(order.id);
-      // Re-fetch pour retourner l'order avec le nouveau status PAID
+
+      // Sprint B - le dispatch driver est maintenant déclenché à
+      // READY_FOR_PICKUP (cf updateOrderStatus), plus à PAID. Ça respecte
+      // le workflow métier : le pro doit confirmer ACCEPTED puis marquer
+      // READY_FOR_PICKUP avant qu'un livreur soit cherché.
+      //
+      // Pour un mode test ULTRA-rapide (debug end-to-end), on peut
+      // bypasser cette étape via env var PRO_AUTO_ACCEPT=true.
+      // En MODE TEST + PRO_AUTO_ACCEPT, on simule le flux complet du pro
+      // (ACCEPTED -> IN_PREPARATION -> READY_FOR_PICKUP) puis on dispatch.
+      if (this.config.get('PRO_AUTO_ACCEPT') === 'true') {
+        this.logger.warn(`[TEST MODE] PRO_AUTO_ACCEPT actif: simule cycle pro complet pour order ${order.id}`);
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'READY_FOR_PICKUP' as any },
+        });
+        this.dispatchNewMission(order.id);
+      }
+      // Re-fetch pour retourner l'order avec le nouveau status
       return this.prisma.order.findUnique({
         where: { id: order.id },
         include: { items: { include: { product: true } }, client: true, professional: true },
@@ -271,6 +346,14 @@ export class OrdersService {
     // le seul status FCM destiné au client en cas de refus.
     const fcmStatus = dto.status === 'REJECTED' ? 'CANCELLED' : dto.status;
     await this.notifications.sendOrderNotification(orderId, fcmStatus as any);
+
+    // Sprint B - quand le pro marque READY_FOR_PICKUP, on broadcast aux
+    // drivers éligibles. C'est le moment correct dans le workflow métier
+    // (avant : on dispatchait à PAID, le driver pouvait arriver chez un
+    // pro qui n'avait pas encore préparé/accepté la commande).
+    if (dto.status === 'READY_FOR_PICKUP') {
+      this.dispatchNewMission(orderId);
+    }
 
     return { data: updated };
   }
