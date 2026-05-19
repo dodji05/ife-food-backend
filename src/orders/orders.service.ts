@@ -72,6 +72,9 @@ export class OrdersService {
       };
 
       // Récupère les drivers éligibles : validated + available + quota OK.
+      // Constante MAX_CONCURRENT_DELIVERIES synchronisée avec drivers.service.ts
+      // (aligné sur le mobile Driver.maxConcurrentDeliveries=3).
+      const MAX_CONCURRENT_DELIVERIES = 3;
       const eligibleDrivers = await this.prisma.driver.findMany({
         where: {
           status: 'VALIDATED' as any,
@@ -79,7 +82,6 @@ export class OrdersService {
         },
         select: {
           id: true, userId: true, zoneCity: true,
-          maxConcurrentDeliveries: true,
           // Compte les missions actives pour appliquer le filtre quota.
           _count: {
             select: {
@@ -94,7 +96,7 @@ export class OrdersService {
       });
 
       const available = eligibleDrivers.filter(
-        (d) => d._count.deliveries < d.maxConcurrentDeliveries);
+        (d) => d._count.deliveries < MAX_CONCURRENT_DELIVERIES);
 
       if (available.length === 0) {
         this.logger.warn(`[dispatch] Aucun driver éligible pour order ${order.id}`);
@@ -355,6 +357,14 @@ export class OrdersService {
       this.dispatchNewMission(orderId);
     }
 
+    // Sprint C - émet order_status temps réel sur la room order_<id>
+    // pour que le client (tracking_screen) ait un statut LIVE sans
+    // dépendre du FCM (peu fiable en background iOS).
+    this.deliveriesGateway.emitOrderStatus(orderId, dto.status, {
+      ...(dto.rejectedReason && { rejectedReason: dto.rejectedReason }),
+      ...(dto.cancelledReason && { cancelledReason: dto.cancelledReason }),
+    });
+
     return { data: updated };
   }
 
@@ -392,6 +402,9 @@ export class OrdersService {
     // gère déjà recipients = [client, pro] mais ne notifie pas le driver
     // tant qu'on ne lui envoie pas explicitement la notif).
     await this.notifications.sendOrderNotification(orderId, 'CANCELLED' as any);
+
+    // Sprint C - emit order_status pour update temps réel UI tracking
+    this.deliveriesGateway.emitOrderStatus(orderId, 'CANCELLED', { reason });
 
     // Si un driver est déjà assigné, lui pousser une notif FCM dédiée
     // pour qu'il arrête sa course. Best-effort, on n'échoue pas le cancel

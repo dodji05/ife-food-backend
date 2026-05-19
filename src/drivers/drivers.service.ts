@@ -1,12 +1,23 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
 import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto } from './dto/driver.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
+// Limite max de missions actives en parallèle par driver.
+// Aligné sur la valeur par défaut côté mobile (Driver.maxConcurrentDeliveries=3).
+// À transformer en config admin (PlatformConfig) quand on aura besoin de la
+// faire varier par driver ou par zone.
+const MAX_CONCURRENT_DELIVERIES = 3;
+
 @Injectable()
 export class DriversService {
-  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+    private deliveriesGateway: DeliveriesGateway,
+  ) {}
 
   async register(userId: string, dto: CreateDriverDto) {
     return this.prisma.driver.create({ data: { ...dto, userId, vehicleType: dto.vehicleType as any, status: 'PENDING' } });
@@ -64,9 +75,9 @@ export class DriversService {
         status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any },
       },
     });
-    if (activeCount >= driver.maxConcurrentDeliveries) {
+    if (activeCount >= MAX_CONCURRENT_DELIVERIES) {
       throw new ConflictException(
-        `Quota atteint (${driver.maxConcurrentDeliveries} missions actives max)`);
+        `Quota atteint (${MAX_CONCURRENT_DELIVERIES} missions actives max)`);
     }
 
     // Race condition fix : on encapsule dans une transaction et on catch
@@ -109,6 +120,21 @@ export class DriversService {
     // Clé alignée sur statusMessages dans notifications.service.ts.
     // Sans cet appel, le client ne serait jamais notifié de l'assignation.
     await this.notifications.sendOrderNotification(orderId, 'DRIVER_ASSIGNED');
+
+    // Sprint C - emit order_status temps réel + payload driver info pour
+    // que le tracking_screen client se mette à jour immédiatement (nom +
+    // tel du livreur dans la card "votre livreur" sans pull-to-refresh).
+    const driverWithUser = await this.prisma.driver.findUnique({
+      where: { id: driver.id },
+      include: { user: { select: { name: true, firstName: true, phone: true, avatarUrl: true } } },
+    });
+    this.deliveriesGateway.emitOrderStatus(orderId, 'DRIVER_ASSIGNED', {
+      driverName: driverWithUser?.user
+        ? [driverWithUser.user.firstName, driverWithUser.user.name].filter(Boolean).join(' ')
+        : null,
+      driverPhone: driverWithUser?.user?.phone,
+      driverAvatarUrl: driverWithUser?.user?.avatarUrl,
+    });
     return { success: true };
   }
 
@@ -138,6 +164,20 @@ export class DriversService {
     // Avant : 'ORDER_DELIVERED'/'ORDER_IN_DELIVERY' -> undefined -> aucune
     // notif envoyée au client pendant toute la phase de livraison.
     await this.notifications.sendOrderNotification(orderId, status === 'DELIVERED' ? 'DELIVERED' : 'IN_DELIVERY');
+
+    // Sprint C - emit le statut FIN (status driver) sur la room order_<id>
+    // pour que le tracking client puisse afficher la bonne étape :
+    //   HEADING_TO_PICKUP   -> "Livreur récupère commande"
+    //   ARRIVED_AT_PICKUP   -> "Livreur arrivé au resto"
+    //   PICKED_UP           -> "Commande prise"
+    //   IN_DELIVERY         -> "Livreur en route vers vous"
+    //   DELIVERED           -> "Livré !"
+    // Distinction importante vs notif FCM unique : ici on a 5 etapes
+    // distinctes au lieu d'un message générique "en livraison".
+    this.deliveriesGateway.emitOrderStatus(orderId, status, {
+      deliveryStep: true,
+      ...(confirmPhoto && { confirmPhoto }),
+    });
     return { success: true };
   }
 

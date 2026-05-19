@@ -85,6 +85,28 @@ export class DeliveriesGateway implements OnGatewayConnection {
     this.server.to(target).emit('new_mission', payload);
   }
 
+  /**
+   * Émet un évènement `order_status` sur la room `order_<id>`.
+   *
+   * Utilisé pour notifier en temps réel TOUS les acteurs concernés
+   * (client + pro + driver assigné) d'un changement de statut sur une
+   * commande, sans dépendre du FCM (qui peut être indisponible en
+   * background iOS).
+   *
+   * Statuts couverts :
+   *   - ACCEPTED / IN_PREPARATION / READY_FOR_PICKUP (côté pro)
+   *   - DRIVER_ASSIGNED (côté driver accept)
+   *   - HEADING_TO_PICKUP / ARRIVED_AT_PICKUP / PICKED_UP / IN_DELIVERY
+   *     / DELIVERED (côté driver delivery step)
+   *   - CANCELLED (annulation client/pro)
+   */
+  emitOrderStatus(orderId: string, status: string, extra: Record<string, any> = {}) {
+    if (!this.server) return;
+    this.server.to(`order_${orderId}`).emit('order_status', {
+      orderId, status, ...extra, at: Date.now(),
+    });
+  }
+
   /** Le livreur émet sa position. On vérifie que le driver émetteur est bien lui. */
   @SubscribeMessage('driver_location')
   async updateDriverLocation(
