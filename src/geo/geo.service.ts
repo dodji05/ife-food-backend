@@ -69,19 +69,38 @@ export class GeoService {
 
   /** Get nearby professionals */
   async getNearbyProfessionals(lat: number, lng: number, radiusKm: number = 10, category?: string) {
+    // Mode test : si GEO_DISABLE_FILTER=true, on retourne TOUS les pros
+    // VALIDATED sans filtre géo ni isOpen. Utile en early stage quand on
+    // n'a que quelques comptes test sans coords précises. À retirer
+    // (ou passer à false) quand on aura un vrai pool de pros géolocalisés.
+    const testMode = this.config.get('GEO_DISABLE_FILTER') === 'true';
+
     const professionals = await this.prisma.professional.findMany({
-      where: { status: 'VALIDATED', isOpen: true, ...(category && { category: category as any }) },
+      where: {
+        status: 'VALIDATED',
+        ...(testMode ? {} : { isOpen: true }),
+        ...(category && { category: category as any }),
+      },
       include: { reviews: { select: { professionalRating: true } } },
     });
 
-    return professionals
-      .map((p) => {
-        const distance = this.calculateDistance(lat, lng, Number(p.lat), Number(p.lng));
-        const avgRating = p.reviews.length
-          ? p.reviews.reduce((s, r) => s + (r.professionalRating ?? 0), 0) / p.reviews.length
-          : 0;
-        return { ...p, distance: Math.round(distance * 10) / 10, avgRating: Math.round(avgRating * 10) / 10 };
-      })
+    const mapped = professionals.map((p) => {
+      // Si lat/lng du pro absents en test mode, on force distance=0.
+      const proLat = p.lat != null ? Number(p.lat) : lat;
+      const proLng = p.lng != null ? Number(p.lng) : lng;
+      const distance = this.calculateDistance(lat, lng, proLat, proLng);
+      const avgRating = p.reviews.length
+        ? p.reviews.reduce((s, r) => s + (r.professionalRating ?? 0), 0) / p.reviews.length
+        : 0;
+      return { ...p, distance: Math.round(distance * 10) / 10, avgRating: Math.round(avgRating * 10) / 10 };
+    });
+
+    if (testMode) {
+      // En test, on retourne tout, trié par nom alphabétique.
+      return mapped.sort((a, b) => a.businessName.localeCompare(b.businessName));
+    }
+
+    return mapped
       .filter((p) => p.distance <= radiusKm)
       .sort((a, b) => a.distance - b.distance);
   }
