@@ -14,8 +14,12 @@ export class GeoController {
   @ApiBearerAuth('JWT')
   @ApiOperation({ summary: 'Get nearby open professionals' })
   getNearby(
-    @Query('lat', ParseFloatPipe) lat: number,
-    @Query('lng', ParseFloatPipe) lng: number,
+    // lat/lng OPTIONNELS : si absents on prend Cotonou par défaut (6.36, 2.42).
+    // Utile pour le mode test GEO_DISABLE_FILTER où la distance n'est pas
+    // utilisée comme filtre, et pour les clients qui n'ont pas autorisé
+    // la géolocalisation sur leur device.
+    @Query('lat', new DefaultValuePipe(6.36), ParseFloatPipe) lat: number,
+    @Query('lng', new DefaultValuePipe(2.42), ParseFloatPipe) lng: number,
     @Query('radius', new DefaultValuePipe(10), ParseFloatPipe) radius: number,
     @Query('category') category?: string,
   ) {
