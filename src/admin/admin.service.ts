@@ -208,6 +208,39 @@ export class AdminService {
     return this.prisma.user.update({ where: { id }, data: { status: status as any } });
   }
 
+  async deleteUser(id: string) {
+    await this.prisma.user.update({ where: { id }, data: { status: 'BANNED' as any, deletedAt: new Date() } }).catch(() =>
+      this.prisma.user.update({ where: { id }, data: { status: 'BANNED' as any } })
+    );
+    return { success: true };
+  }
+
+  // ─── PROFESSIONALS MANAGEMENT ────────────
+  async getAllProfessionals(pagination?: PaginationDto) {
+    const [professionals, total] = await Promise.all([
+      this.prisma.professional.findMany({
+        include: { user: { select: { name: true, phone: true, email: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: pagination?.skip, take: pagination?.limit ?? 100,
+      }),
+      this.prisma.professional.count(),
+    ]);
+    return { data: professionals, meta: { total } };
+  }
+
+  // ─── DRIVERS MANAGEMENT ───────────────────
+  async getAllDrivers(pagination?: PaginationDto) {
+    const [drivers, total] = await Promise.all([
+      this.prisma.driver.findMany({
+        include: { user: { select: { name: true, phone: true, email: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: pagination?.skip, take: pagination?.limit ?? 100,
+      }),
+      this.prisma.driver.count(),
+    ]);
+    return { data: drivers, meta: { total } };
+  }
+
   // ─── ORDERS MANAGEMENT ────────────────────
   async getAllOrders(filters: any, pagination: PaginationDto) {
     const where: any = {};

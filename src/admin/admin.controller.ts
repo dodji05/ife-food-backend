@@ -60,6 +60,29 @@ export class AdminController {
     return this.adminService.updateUserStatus(id, status);
   }
 
+  @Delete('users/:id')
+  deleteUser(@Param('id') id: string) {
+    return this.adminService.deleteUser(id);
+  }
+
+  // PROFESSIONALS (all)
+  @Get('professionals')
+  getAllProfessionals(@Query() query: any) {
+    const pagination = new PaginationDto();
+    if (query.page) pagination.page = Number(query.page);
+    if (query.limit) pagination.limit = Number(query.limit);
+    return this.adminService.getAllProfessionals(pagination);
+  }
+
+  // DRIVERS (all)
+  @Get('drivers')
+  getAllDrivers(@Query() query: any) {
+    const pagination = new PaginationDto();
+    if (query.page) pagination.page = Number(query.page);
+    if (query.limit) pagination.limit = Number(query.limit);
+    return this.adminService.getAllDrivers(pagination);
+  }
+
   // ORDERS
   // All query params are merged into a single object; AdminService separates
   // pagination fields (page, limit) from filter fields internally.
