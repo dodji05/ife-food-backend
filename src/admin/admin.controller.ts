@@ -154,6 +154,15 @@ export class AdminController {
   @Post('promo-codes')
   createPromoCode(@Body() dto: any) { return this.adminService.createPromoCode(dto); }
 
+  @Patch('promo-codes/:id')
+  updatePromoCode(@Param('id') id: string, @Body() dto: any) { return this.adminService.updatePromoCode(id, dto); }
+
+  @Patch('promo-codes/:id/toggle')
+  togglePromoCode(@Param('id') id: string) { return this.adminService.togglePromoCode(id); }
+
+  @Delete('promo-codes/:id')
+  deletePromoCode(@Param('id') id: string) { return this.adminService.deletePromoCode(id); }
+
   // LEGAL PAGES
   @Get('legal/:type/:lang')
   getLegalPage(@Param('type') type: string, @Param('lang') lang: string) {

@@ -345,12 +345,52 @@ export class AdminService {
   }
 
   // ─── PROMO CODES ──────────────────────────
-  async createPromoCode(dto: any) {
-    return this.prisma.promoCode.create({ data: dto });
-  }
-
   async getPromoCodes() {
     return this.prisma.promoCode.findMany({ orderBy: { createdAt: 'desc' } });
+  }
+
+  async createPromoCode(dto: any) {
+    const { code, type, value, minOrder, maxUses, perUser, expiresAt, countries } = dto;
+    return this.prisma.promoCode.create({
+      data: {
+        code: String(code).toUpperCase().trim(),
+        type,
+        value: Number(value),
+        minOrder: Number(minOrder ?? 0),
+        maxUses: maxUses ? Number(maxUses) : null,
+        perUser: Boolean(perUser ?? false),
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        countries: Array.isArray(countries) ? countries : [],
+      },
+    });
+  }
+
+  async updatePromoCode(id: string, dto: any) {
+    const { code, type, value, minOrder, maxUses, perUser, expiresAt, countries } = dto;
+    return this.prisma.promoCode.update({
+      where: { id },
+      data: {
+        ...(code !== undefined && { code: String(code).toUpperCase().trim() }),
+        ...(type !== undefined && { type }),
+        ...(value !== undefined && { value: Number(value) }),
+        ...(minOrder !== undefined && { minOrder: Number(minOrder) }),
+        ...(maxUses !== undefined && { maxUses: maxUses ? Number(maxUses) : null }),
+        ...(perUser !== undefined && { perUser: Boolean(perUser) }),
+        ...(expiresAt !== undefined && { expiresAt: expiresAt ? new Date(expiresAt) : null }),
+        ...(countries !== undefined && { countries: Array.isArray(countries) ? countries : [] }),
+      },
+    });
+  }
+
+  async togglePromoCode(id: string) {
+    const promo = await this.prisma.promoCode.findUnique({ where: { id } });
+    if (!promo) throw new NotFoundException();
+    return this.prisma.promoCode.update({ where: { id }, data: { isActive: !promo.isActive } });
+  }
+
+  async deletePromoCode(id: string) {
+    await this.prisma.promoCode.delete({ where: { id } });
+    return { success: true };
   }
 
   // ─── LEGAL PAGES ──────────────────────────
