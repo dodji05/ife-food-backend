@@ -17,8 +17,8 @@ export class AdminController {
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Get admin dashboard KPIs' })
-  getDashboard(@Query('period') period: string) {
-    return this.adminService.getDashboard(period);
+  getDashboard(@Query('period') period: string, @Query('country') country?: string) {
+    return this.adminService.getDashboard(period, country);
   }
 
   // VALIDATIONS
@@ -41,11 +41,11 @@ export class AdminController {
   // USERS
   @Get('users')
   getUsers(@Query() query: any) {
-    const { page, limit, role, ...rest } = query;
+    const { page, limit, role, country } = query;
     const pagination = new PaginationDto();
     if (page) pagination.page = Number(page);
     if (limit) pagination.limit = Number(limit);
-    return this.adminService.getUsers(role, pagination);
+    return this.adminService.getUsers(role, pagination, country);
   }
 
   @Patch('users/:id/status')

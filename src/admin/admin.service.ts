@@ -8,7 +8,7 @@ export class AdminService {
   constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
 
   // ─── DASHBOARD ────────────────────────────
-  async getDashboard(period: string = 'week') {
+  async getDashboard(period: string = 'week', country?: string) {
     const now = new Date();
     const periodMap: Record<string, Date> = {
       day: new Date(now.getTime() - 24 * 60 * 60 * 1000),
@@ -16,17 +16,37 @@ export class AdminService {
       month: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
     };
     const since = periodMap[period] ?? periodMap.week;
+    const geoFilter = country ? { deliveryCountry: country } : {};
 
-    const [orders, revenue, newUsers, newProfessionals, newDrivers, activeDeliveries, avgRating, cancelRate] = await Promise.all([
-      this.prisma.order.aggregate({ where: { createdAt: { gte: since } }, _count: true, _sum: { totalAmount: true } }),
+    const [orders, revenue, newUsers, newProfessionals, newDrivers, activeDeliveries, avgRating, cancelRate, rawOrders] = await Promise.all([
+      this.prisma.order.aggregate({ where: { createdAt: { gte: since }, ...geoFilter }, _count: true, _sum: { totalAmount: true } }),
       this.prisma.transaction.aggregate({ where: { type: 'COMMISSION', createdAt: { gte: since } }, _sum: { amount: true } }),
-      this.prisma.user.count({ where: { createdAt: { gte: since }, role: 'CLIENT' } }),
+      this.prisma.user.count({ where: { createdAt: { gte: since }, role: 'CLIENT', ...(country ? { countryCode: country } : {}) } }),
       this.prisma.professional.count({ where: { createdAt: { gte: since } } }),
       this.prisma.driver.count({ where: { createdAt: { gte: since } } }),
       this.prisma.delivery.count({ where: { status: { in: ['IN_DELIVERY','ASSIGNED'] } } }),
       this.prisma.review.aggregate({ _avg: { professionalRating: true } }),
-      this.prisma.order.count({ where: { status: 'CANCELLED', createdAt: { gte: since } } }),
+      this.prisma.order.count({ where: { status: 'CANCELLED', createdAt: { gte: since }, ...geoFilter } }),
+      this.prisma.order.findMany({
+        where: { createdAt: { gte: since }, ...geoFilter },
+        select: { createdAt: true, totalAmount: true },
+      }),
     ]);
+
+    const bucketCount = period === 'month' ? 30 : period === 'day' ? 1 : 7;
+    const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const buckets = new Map<string, { revenue: number; orders: number }>();
+    for (let i = bucketCount - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      buckets.set(fmt(d), { revenue: 0, orders: 0 });
+    }
+    for (const o of rawOrders) {
+      const key = fmt(new Date(o.createdAt));
+      const b = buckets.get(key);
+      if (b) { b.revenue += Number(o.totalAmount ?? 0); b.orders++; }
+    }
+    const chartData = Array.from(buckets.entries()).map(([day, v]) => ({ day, ...v }));
 
     const cancelRatePercent = orders._count > 0 ? (cancelRate / orders._count * 100).toFixed(1) : 0;
 
@@ -37,6 +57,7 @@ export class AdminService {
         newUsers, newProfessionals, newDrivers, activeDeliveries,
         avgRating: avgRating._avg.professionalRating,
         cancelRate: cancelRatePercent,
+        chartData,
       },
     };
   }
@@ -90,9 +111,10 @@ export class AdminService {
   }
 
   // ─── USERS MANAGEMENT ─────────────────────
-  async getUsers(role?: string, pagination?: PaginationDto) {
+  async getUsers(role?: string, pagination?: PaginationDto, country?: string) {
     const where: any = {};
     if (role) where.role = role;
+    if (country) where.countryCode = country;
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({ where, orderBy: { createdAt: 'desc' }, skip: pagination?.skip, take: pagination?.limit }),
       this.prisma.user.count({ where }),
