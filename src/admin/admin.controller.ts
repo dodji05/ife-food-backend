@@ -21,6 +21,13 @@ export class AdminController {
     return this.adminService.getDashboard(period, country);
   }
 
+  // ANALYTICS
+  @Get('analytics')
+  @ApiOperation({ summary: 'Get advanced analytics' })
+  getAnalytics(@Query('period') period: string, @Query('country') country?: string) {
+    return this.adminService.getAnalytics(period, country);
+  }
+
   // VALIDATIONS
   @Get('pending/professionals')
   getPendingProfessionals() { return this.adminService.getPendingProfessionals(); }

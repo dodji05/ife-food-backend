@@ -50,6 +50,13 @@ export class AdminService {
 
     const cancelRatePercent = orders._count > 0 ? (cancelRate / orders._count * 100).toFixed(1) : 0;
 
+    const prevSince = new Date(since.getTime() - (now.getTime() - since.getTime()));
+    const [prevOrders, prevRevenue, prevUsers] = await Promise.all([
+      this.prisma.order.aggregate({ where: { createdAt: { gte: prevSince, lt: since }, ...geoFilter }, _count: true, _sum: { totalAmount: true } }),
+      this.prisma.transaction.aggregate({ where: { type: 'COMMISSION', createdAt: { gte: prevSince, lt: since } }, _sum: { amount: true } }),
+      this.prisma.user.count({ where: { createdAt: { gte: prevSince, lt: since }, role: 'CLIENT', ...(country ? { countryCode: country } : {}) } }),
+    ]);
+
     return {
       data: {
         orders: { count: orders._count, revenue: orders._sum.totalAmount ?? 0 },
@@ -58,6 +65,81 @@ export class AdminService {
         avgRating: avgRating._avg.professionalRating,
         cancelRate: cancelRatePercent,
         chartData,
+        prev: {
+          orders: { count: prevOrders._count, revenue: prevOrders._sum.totalAmount ?? 0 },
+          commissions: prevRevenue._sum.amount ?? 0,
+          newUsers: prevUsers,
+        },
+      },
+    };
+  }
+
+  // ─── ANALYTICS ───────────────────────────
+  async getAnalytics(period: string = 'month', country?: string) {
+    const now = new Date();
+    const periodMap: Record<string, Date> = {
+      day: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      week: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+      month: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+    };
+    const since = periodMap[period] ?? periodMap.month;
+    const geoFilter = country ? { deliveryCountry: country } : {};
+    const baseWhere = { createdAt: { gte: since }, ...geoFilter };
+
+    const [totalOrders, deliveredOrders, cancelledOrders, avgBasket, avgEstDelivery, ordersByCountry, ordersWithPro] = await Promise.all([
+      this.prisma.order.count({ where: baseWhere }),
+      this.prisma.order.count({ where: { ...baseWhere, status: 'DELIVERED' } }),
+      this.prisma.order.count({ where: { ...baseWhere, status: 'CANCELLED' } }),
+      this.prisma.order.aggregate({ where: { ...baseWhere, status: 'DELIVERED' }, _avg: { totalAmount: true } }),
+      this.prisma.order.aggregate({ where: { ...baseWhere, status: 'DELIVERED', estimatedDeliveryMin: { not: null } }, _avg: { estimatedDeliveryMin: true } }),
+      this.prisma.order.groupBy({ by: ['deliveryCountry'], where: { ...baseWhere, status: 'DELIVERED', deliveryCountry: { not: null } }, _sum: { totalAmount: true }, _count: true, orderBy: { _sum: { totalAmount: 'desc' } }, take: 8 }),
+      this.prisma.order.findMany({ where: baseWhere, select: { clientId: true, professional: { select: { category: true } } }, take: 5000 }),
+    ]);
+
+    const completionRate = (totalOrders - cancelledOrders) > 0
+      ? Math.round(deliveredOrders / (totalOrders - cancelledOrders) * 100)
+      : 0;
+
+    // category breakdown
+    const catCounts: Record<string, number> = {};
+    for (const o of ordersWithPro) {
+      const cat = o.professional?.category ?? 'OTHER';
+      catCounts[cat] = (catCounts[cat] ?? 0) + 1;
+    }
+    const catLabels: Record<string, string> = {
+      RESTAURANT: 'Restaurant', GROCERY: 'Épicerie', SUPERMARKET: 'Supermarché',
+      BAKERY: 'Boulangerie', PHARMACY: 'Pharmacie', OTHER: 'Autre',
+    };
+    const total = ordersWithPro.length || 1;
+    const byCategory = Object.entries(catCounts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([key, count]) => ({ name: catLabels[key] ?? key, value: Math.round(count / total * 100) }));
+
+    // retention: users with 2+ orders vs users with any order
+    const clientCounts: Record<string, number> = {};
+    for (const o of ordersWithPro) { clientCounts[o.clientId] = (clientCounts[o.clientId] ?? 0) + 1; }
+    const withOrders = Object.keys(clientCounts).length;
+    const withRepeat = Object.values(clientCounts).filter(c => c >= 2).length;
+    const retentionRate = withOrders > 0 ? Math.round(withRepeat / withOrders * 100) : 0;
+
+    // funnel
+    const totalUsers = await this.prisma.user.count({ where: { role: 'CLIENT', ...(country ? { countryCode: country } : {}) } });
+    const funnelMax = totalUsers || 1;
+    const funnel = [
+      { label: 'Clients inscrits', value: totalUsers, pct: 100, color: 'bg-brand-green' },
+      { label: 'Ont commandé', value: withOrders, pct: Math.round(withOrders / funnelMax * 100), color: 'bg-blue-500' },
+      { label: 'Clients fidèles', value: withRepeat, pct: Math.round(withRepeat / funnelMax * 100), color: 'bg-purple-500' },
+    ];
+
+    return {
+      data: {
+        completionRate,
+        avgBasket: avgBasket._avg.totalAmount ?? 0,
+        avgDeliveryMin: avgEstDelivery._avg.estimatedDeliveryMin ? Math.round(avgEstDelivery._avg.estimatedDeliveryMin) : null,
+        retentionRate,
+        byCountry: ordersByCountry.map(r => ({ name: r.deliveryCountry ?? '?', revenue: r._sum.totalAmount ?? 0, orders: r._count })),
+        byCategory,
+        funnel,
       },
     };
   }
