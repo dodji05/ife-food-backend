@@ -65,6 +65,28 @@ export class AdminController {
     return this.adminService.deleteUser(id);
   }
 
+  // DRIVER DETAIL + MISSIONS
+  @Get('drivers/:id')
+  getDriverDetail(@Param('id') id: string) {
+    return this.adminService.getDriverDetail(id);
+  }
+
+  @Get('drivers/:id/missions')
+  getDriverMissions(@Param('id') id: string) {
+    return this.adminService.getDriverMissions(id);
+  }
+
+  // PROFESSIONAL DETAIL + ORDERS
+  @Get('professionals/:id')
+  getProfessionalDetail(@Param('id') id: string) {
+    return this.adminService.getProfessionalDetail(id);
+  }
+
+  @Get('professionals/:id/orders')
+  getProfessionalOrders(@Param('id') id: string) {
+    return this.adminService.getProfessionalOrders(id);
+  }
+
   // PROFESSIONALS (all)
   @Get('professionals')
   getAllProfessionals(@Query() query: any) {

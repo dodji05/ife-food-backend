@@ -263,6 +263,67 @@ export class AdminService {
     return this.prisma.product.update({ where: { id: productId }, data: { isAvailable: !p.isAvailable } });
   }
 
+  // ─── DRIVER DETAIL + MISSIONS ────────────
+  async getDriverDetail(id: string) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, name: true, phone: true, email: true, status: true, countryCode: true, createdAt: true } },
+        documents: true,
+      },
+    });
+    if (!driver) throw new NotFoundException();
+    return { data: driver };
+  }
+
+  async getDriverMissions(id: string) {
+    const orders = await this.prisma.order.findMany({
+      where: { driverId: id },
+      include: {
+        client: { select: { name: true, phone: true } },
+        professional: { select: { businessName: true, city: true } },
+        payment: { select: { status: true, amount: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return { data: orders };
+  }
+
+  // ─── PROFESSIONAL DETAIL + ORDERS ────────
+  async getProfessionalDetail(id: string) {
+    const pro = await this.prisma.professional.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, name: true, phone: true, email: true, status: true, countryCode: true, createdAt: true } },
+        documents: true,
+      },
+    });
+    if (!pro) throw new NotFoundException();
+    return { data: pro };
+  }
+
+  async getProfessionalOrders(id: string) {
+    const [orders, stats] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { professionalId: id },
+        include: {
+          client: { select: { name: true, phone: true } },
+          driver: { include: { user: { select: { name: true } } } },
+          payment: { select: { status: true, amount: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.order.aggregate({
+        where: { professionalId: id },
+        _count: true,
+        _sum: { totalAmount: true },
+      }),
+    ]);
+    return { data: { orders, stats: { total: stats._count, revenue: stats._sum.totalAmount ?? 0 } } };
+  }
+
   // ─── PROFESSIONALS MANAGEMENT ────────────
   async getAllProfessionals(pagination?: PaginationDto) {
     const [professionals, total] = await Promise.all([
