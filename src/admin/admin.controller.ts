@@ -40,7 +40,11 @@ export class AdminController {
 
   // USERS
   @Get('users')
-  getUsers(@Query('role') role: string, @Query() pagination: PaginationDto) {
+  getUsers(@Query() query: any) {
+    const { page, limit, role, ...rest } = query;
+    const pagination = new PaginationDto();
+    if (page) pagination.page = Number(page);
+    if (limit) pagination.limit = Number(limit);
     return this.adminService.getUsers(role, pagination);
   }
 
