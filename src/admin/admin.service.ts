@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -213,6 +213,54 @@ export class AdminService {
       this.prisma.user.update({ where: { id }, data: { status: 'BANNED' as any } })
     );
     return { success: true };
+  }
+
+  // ─── CATALOGUE ADMIN ─────────────────────
+  async getCatalogueForPro(proId: string) {
+    const [professional, categories] = await Promise.all([
+      this.prisma.professional.findUnique({ where: { id: proId }, select: { id: true, businessName: true, category: true, city: true } }),
+      this.prisma.productCategory.findMany({
+        where: { professionalId: proId },
+        orderBy: { sortOrder: 'asc' },
+        include: { products: { orderBy: { createdAt: 'asc' } } },
+      }),
+    ]);
+    if (!professional) throw new NotFoundException('Professionnel introuvable');
+    return { data: { professional, categories } };
+  }
+
+  async createCatalogueCategory(proId: string, dto: { name: any; icon?: string }) {
+    return this.prisma.productCategory.create({ data: { professionalId: proId, name: dto.name, icon: dto.icon } });
+  }
+
+  async deleteCatalogueCategory(categoryId: string) {
+    await this.prisma.$transaction([
+      this.prisma.product.updateMany({ where: { categoryId }, data: { categoryId: null } }),
+      this.prisma.productCategory.delete({ where: { id: categoryId } }),
+    ]);
+    return { success: true };
+  }
+
+  async createCatalogueProduct(proId: string, dto: any) {
+    const { categoryId, name, description, price, currency, imageUrl, isAvailable, stock, variants } = dto;
+    return this.prisma.product.create({
+      data: { professionalId: proId, categoryId: categoryId ?? null, name, description: description ?? null, price: Number(price), currency: currency ?? 'XOF', imageUrl: imageUrl ?? null, isAvailable: isAvailable ?? true, stock: stock ?? null, variants: variants ?? null },
+    });
+  }
+
+  async updateCatalogueProduct(productId: string, dto: any) {
+    return this.prisma.product.update({ where: { id: productId }, data: dto });
+  }
+
+  async deleteCatalogueProduct(productId: string) {
+    await this.prisma.product.delete({ where: { id: productId } });
+    return { success: true };
+  }
+
+  async toggleCatalogueProduct(productId: string) {
+    const p = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!p) throw new NotFoundException();
+    return this.prisma.product.update({ where: { id: productId }, data: { isAvailable: !p.isAvailable } });
   }
 
   // ─── PROFESSIONALS MANAGEMENT ────────────

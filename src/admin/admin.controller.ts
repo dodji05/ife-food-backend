@@ -111,6 +111,42 @@ export class AdminController {
     return this.adminService.setPaymentGateways(body);
   }
 
+  // CATALOGUE ADMIN
+  @Get('catalogue/:proId')
+  getCatalogueForPro(@Param('proId') proId: string) {
+    return this.adminService.getCatalogueForPro(proId);
+  }
+
+  @Post('catalogue/:proId/categories')
+  createCatalogueCategory(@Param('proId') proId: string, @Body() dto: any) {
+    return this.adminService.createCatalogueCategory(proId, dto);
+  }
+
+  @Delete('catalogue/categories/:id')
+  deleteCatalogueCategory(@Param('id') id: string) {
+    return this.adminService.deleteCatalogueCategory(id);
+  }
+
+  @Post('catalogue/:proId/products')
+  createCatalogueProduct(@Param('proId') proId: string, @Body() dto: any) {
+    return this.adminService.createCatalogueProduct(proId, dto);
+  }
+
+  @Patch('catalogue/products/:id')
+  updateCatalogueProduct(@Param('id') id: string, @Body() dto: any) {
+    return this.adminService.updateCatalogueProduct(id, dto);
+  }
+
+  @Delete('catalogue/products/:id')
+  deleteCatalogueProduct(@Param('id') id: string) {
+    return this.adminService.deleteCatalogueProduct(id);
+  }
+
+  @Patch('catalogue/products/:id/toggle')
+  toggleCatalogueProduct(@Param('id') id: string) {
+    return this.adminService.toggleCatalogueProduct(id);
+  }
+
   // PROMO CODES
   @Get('promo-codes')
   getPromoCodes() { return this.adminService.getPromoCodes(); }
