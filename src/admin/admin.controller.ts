@@ -185,6 +185,27 @@ export class AdminController {
   @Delete('promo-codes/:id')
   deletePromoCode(@Param('id') id: string) { return this.adminService.deletePromoCode(id); }
 
+  // REFERRALS
+  @Get('referrals')
+  getReferrals() { return this.adminService.getReferrals(); }
+
+  @Get('referral-config')
+  getReferralConfig() { return this.adminService.getReferralConfig(); }
+
+  @Patch('referral-config')
+  updateReferralConfig(@Body() body: { rewardAmount: number; enabled: boolean }) {
+    return this.adminService.updateReferralConfig(body.rewardAmount, body.enabled);
+  }
+
+  // WALLET
+  @Get('users/:id/wallet')
+  getUserWallet(@Param('id') id: string) { return this.adminService.getUserWallet(id); }
+
+  @Post('users/:id/wallet/adjust')
+  adjustWallet(@Param('id') id: string, @Body() body: { amount: number; type: 'ADMIN_CREDIT' | 'ADMIN_DEBIT'; description?: string }) {
+    return this.adminService.adjustWallet(id, body.amount, body.type, body.description);
+  }
+
   // LEGAL PAGES
   @Get('legal/:type/:lang')
   getLegalPage(@Param('type') type: string, @Param('lang') lang: string) {

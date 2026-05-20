@@ -142,6 +142,38 @@ export class PaymentsService {
     // la commande et la préparer avant qu'un livreur soit cherché.
     // En mode test PRO_AUTO_ACCEPT=true, le bypass est dans createOrder
     // (n'a pas lieu d'être ici car le webhook réel implique un vrai pro).
+
+    // Sprint 7 - récompense parrainage best-effort (ne bloque pas le paiement)
+    this.prisma.order
+      .findUnique({ where: { id: orderId }, select: { clientId: true } })
+      .then(o => { if (o) this.grantReferralReward(o.clientId).catch(() => {}); })
+      .catch(() => {});
+  }
+
+  private async grantReferralReward(clientId: string): Promise<void> {
+    const paidStatuses = ['PAID','ACCEPTED','IN_PREPARATION','READY_FOR_PICKUP','DRIVER_ASSIGNED','PICKED_UP','IN_DELIVERY','DELIVERED'];
+    const orderCount = await this.prisma.order.count({ where: { clientId, status: { in: paidStatuses as any[] } } });
+    if (orderCount > 1) return;
+
+    const referral = await this.prisma.referral.findUnique({ where: { refereeId: clientId } });
+    if (!referral || referral.status !== 'PENDING') return;
+
+    const [enabledCfg, amountCfg] = await Promise.all([
+      this.prisma.platformConfig.findUnique({ where: { key: 'referral_enabled' } }),
+      this.prisma.platformConfig.findUnique({ where: { key: 'referral_reward_amount' } }),
+    ]);
+    if (enabledCfg && enabledCfg.value === false) return;
+    const amount = amountCfg ? Number(amountCfg.value) : 500;
+    if (amount <= 0) return;
+
+    let wallet = await this.prisma.wallet.findUnique({ where: { userId: referral.referrerId } });
+    if (!wallet) wallet = await this.prisma.wallet.create({ data: { userId: referral.referrerId, balance: 0 } });
+
+    await this.prisma.$transaction([
+      this.prisma.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: amount } } }),
+      this.prisma.walletTransaction.create({ data: { walletId: wallet.id, amount, type: 'REFERRAL_REWARD' as any, description: 'Récompense parrainage' } }),
+      this.prisma.referral.update({ where: { id: referral.id }, data: { status: 'REWARDED' as any, rewardedAt: new Date() } }),
+    ]);
   }
 
   async failPayment(orderId: string) {

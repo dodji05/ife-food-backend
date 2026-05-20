@@ -117,6 +117,17 @@ enum TransactionType {
   TIP
 }
 
+enum WalletTxType {
+  REFERRAL_REWARD
+  ADMIN_CREDIT
+  ADMIN_DEBIT
+}
+
+enum ReferralStatus {
+  PENDING
+  REWARDED
+}
+
 enum TransactionStatus {
   PENDING
   COMPLETED
@@ -199,6 +210,10 @@ model User {
   loginLogs        LoginLog[]
   legalAcceptances LegalAcceptance[]
   addresses        UserAddress[]
+  referralCode     String?           @unique
+  wallet           Wallet?
+  referrals        Referral[]        @relation("ReferrerReferrals")
+  referredAs       Referral?         @relation("RefereeReferral")
 
   @@map("users")
 }
@@ -682,4 +697,45 @@ model ExchangeRate {
 
   @@unique([fromCurrency, toCurrency])
   @@map("exchange_rates")
+}
+
+// ─── WALLET & PARRAINAGE ──────────────────
+
+model Wallet {
+  id           String              @id @default(uuid())
+  userId       String              @unique
+  balance      Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id])
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id          String       @id @default(uuid())
+  walletId    String
+  amount      Int
+  type        WalletTxType
+  description String?
+  createdAt   DateTime     @default(now())
+  wallet      Wallet       @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@map("wallet_transactions")
+}
+
+model Referral {
+  id         String         @id @default(uuid())
+  referrerId String
+  refereeId  String         @unique
+  status     ReferralStatus @default(PENDING)
+  rewardedAt DateTime?
+  createdAt  DateTime       @default(now())
+  referrer   User           @relation("ReferrerReferrals", fields: [referrerId], references: [id])
+  referee    User           @relation("RefereeReferral", fields: [refereeId], references: [id])
+
+  @@index([referrerId])
+  @@map("referrals")
 }

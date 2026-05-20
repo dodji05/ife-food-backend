@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -509,5 +509,75 @@ export class AdminService {
       this.prisma.transaction.aggregate({ where: { ...where, type: 'REFUND' }, _sum: { amount: true } }),
     ]);
     return { data: { total: total._sum.amount, commissions: commissions._sum.amount, payouts: payouts._sum.amount, refunds: refunds._sum.amount } };
+  }
+
+  // ─── REFERRAL ─────────────────────────────
+  async getReferrals() {
+    const [referrals, total, pending, rewarded, totalCredits] = await Promise.all([
+      this.prisma.referral.findMany({
+        include: {
+          referrer: { select: { id: true, name: true, firstName: true, phone: true } },
+          referee:  { select: { id: true, name: true, firstName: true, phone: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.referral.count(),
+      this.prisma.referral.count({ where: { status: 'PENDING' } }),
+      this.prisma.referral.count({ where: { status: 'REWARDED' } }),
+      this.prisma.walletTransaction.aggregate({ where: { type: 'REFERRAL_REWARD' as any }, _sum: { amount: true } }),
+    ]);
+    return { data: { referrals, stats: { total, pending, rewarded, totalCredits: totalCredits._sum.amount ?? 0 } } };
+  }
+
+  async getReferralConfig() {
+    const [amountCfg, enabledCfg] = await Promise.all([
+      this.prisma.platformConfig.findUnique({ where: { key: 'referral_reward_amount' } }),
+      this.prisma.platformConfig.findUnique({ where: { key: 'referral_enabled' } }),
+    ]);
+    return {
+      data: {
+        rewardAmount: amountCfg ? Number(amountCfg.value) : 500,
+        enabled: enabledCfg ? Boolean(enabledCfg.value) : true,
+      },
+    };
+  }
+
+  async updateReferralConfig(rewardAmount: number, enabled: boolean) {
+    await Promise.all([
+      this.prisma.platformConfig.upsert({
+        where: { key: 'referral_reward_amount' },
+        create: { key: 'referral_reward_amount', value: rewardAmount },
+        update: { value: rewardAmount },
+      }),
+      this.prisma.platformConfig.upsert({
+        where: { key: 'referral_enabled' },
+        create: { key: 'referral_enabled', value: enabled },
+        update: { value: enabled },
+      }),
+    ]);
+    return { data: { rewardAmount, enabled } };
+  }
+
+  // ─── WALLET ───────────────────────────────
+  async getUserWallet(userId: string) {
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+      include: { transactions: { orderBy: { createdAt: 'desc' }, take: 50 } },
+    });
+    return { data: wallet ?? { balance: 0, transactions: [] } };
+  }
+
+  async adjustWallet(userId: string, amount: number, type: 'ADMIN_CREDIT' | 'ADMIN_DEBIT', description?: string) {
+    let wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) {
+      wallet = await this.prisma.wallet.create({ data: { userId, balance: 0 } });
+    }
+    const delta = type === 'ADMIN_DEBIT' ? -Math.abs(amount) : Math.abs(amount);
+    if (wallet.balance + delta < 0) throw new BadRequestException('Solde insuffisant pour ce débit');
+    await this.prisma.$transaction([
+      this.prisma.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: delta } } }),
+      this.prisma.walletTransaction.create({ data: { walletId: wallet.id, amount: delta, type: type as any, description } }),
+    ]);
+    return { data: { balance: wallet.balance + delta } };
   }
 }
