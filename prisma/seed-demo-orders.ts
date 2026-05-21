@@ -18,9 +18,19 @@
  * ─────────────────────────────────────────────────────────────────────────
  */
 
-import { PrismaClient } from '@prisma/client';
+import * as path from 'node:path';
+import * as dotenv from 'dotenv';
+dotenv.config({ path: path.join(process.cwd(), '.env') });
 
-const prisma = new PrismaClient();
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL absent — vérifier que le .env existe à la racine du backend.');
+}
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 
 // ── Acteurs ────────────────────────────────────────────────────────────────
 const CLIENT_ID       = '87c82561-5947-4e6a-aef5-0fb365feee38';
