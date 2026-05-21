@@ -559,6 +559,22 @@ export class AdminService {
   }
 
   // ─── ORDERS MANAGEMENT ────────────────────
+  /** Liste des villes distinctes où des commandes ont été placées. */
+  async getDistinctCities(country?: string) {
+    const rows = await this.prisma.order.findMany({
+      where: { deliveryCity: { not: null }, ...(country ? { deliveryCountry: country } : {}) },
+      select: { deliveryCity: true },
+      distinct: ['deliveryCity'],
+      take: 200,
+    });
+    return {
+      data: rows
+        .map(r => r.deliveryCity)
+        .filter((v): v is string => !!v)
+        .sort((a, b) => a.localeCompare(b, 'fr')),
+    };
+  }
+
   async getAllOrders(filters: any, pagination: PaginationDto) {
     const where: any = {};
     // Le frontend peut envoyer "PAID,IN_PREPARATION,IN_DELIVERY" (CSV).
@@ -571,7 +587,22 @@ export class AdminService {
       where.status = statuses.length === 1 ? statuses[0] : { in: statuses };
     }
     if (filters.country) where.deliveryCountry = filters.country;
-    if (filters.from && filters.to) where.createdAt = { gte: new Date(filters.from), lte: new Date(filters.to) };
+    if (filters.city)    where.deliveryCity    = filters.city;
+    // Période (jour/semaine/mois) — calculée côté backend pour rester
+    // cohérent avec /admin/dashboard. Si `from/to` explicites sont fournis,
+    // ils prennent le pas sur `period`.
+    if (filters.from && filters.to) {
+      where.createdAt = { gte: new Date(filters.from), lte: new Date(filters.to) };
+    } else if (filters.period) {
+      const now = Date.now();
+      const ms: Record<string, number> = {
+        day:   24 * 60 * 60 * 1000,
+        week:  7 * 24 * 60 * 60 * 1000,
+        month: 30 * 24 * 60 * 60 * 1000,
+      };
+      const range = ms[filters.period];
+      if (range) where.createdAt = { gte: new Date(now - range) };
+    }
 
     const [orders, total] = await Promise.all([
       this.prisma.order.findMany({

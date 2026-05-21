@@ -121,6 +121,14 @@ export class AdminController {
     return this.adminService.getAllOrders(filters, pagination);
   }
 
+  // ─── Liste des villes distinctes (pour alimenter les dropdowns de filtres
+  //     sans charger toute la payload du dashboard).
+  @Get('filters/cities')
+  @ApiOperation({ summary: 'Distinct delivery cities for filter dropdowns' })
+  getDistinctCities(@Query('country') country?: string) {
+    return this.adminService.getDistinctCities(country);
+  }
+
   @Patch('orders/:id/reassign')
   reassignDriver(@Param('id') id: string, @Body('driverId') driverId: string) {
     return this.adminService.reassignDriver(id, driverId);
