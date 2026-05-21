@@ -69,11 +69,10 @@ export class GeoService {
 
   /** Get nearby professionals */
   async getNearbyProfessionals(lat: number, lng: number, radiusKm: number = 10, category?: string) {
-    // Mode test : si GEO_DISABLE_FILTER=true, on retourne TOUS les pros
-    // VALIDATED sans filtre géo ni isOpen. Utile en early stage quand on
-    // n'a que quelques comptes test sans coords précises. À retirer
-    // (ou passer à false) quand on aura un vrai pool de pros géolocalisés.
-    const testMode = this.config.get('GEO_DISABLE_FILTER') === 'true';
+    // Retourne TOUS les pros VALIDATED sans filtre géo ni isOpen par défaut.
+    // Pour réactiver le filtre géographique (rayon + isOpen), passer
+    // GEO_DISABLE_FILTER=false dans les variables d'environnement.
+    const testMode = this.config.get('GEO_DISABLE_FILTER') !== 'false';
 
     const professionals = await this.prisma.professional.findMany({
       where: {
