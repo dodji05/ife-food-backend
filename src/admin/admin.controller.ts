@@ -17,8 +17,12 @@ export class AdminController {
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Get admin dashboard KPIs' })
-  getDashboard(@Query('period') period: string, @Query('country') country?: string) {
-    return this.adminService.getDashboard(period, country);
+  getDashboard(
+    @Query('period') period: string,
+    @Query('country') country?: string,
+    @Query('city') city?: string,
+  ) {
+    return this.adminService.getDashboard(period, country, city);
   }
 
   // ANALYTICS

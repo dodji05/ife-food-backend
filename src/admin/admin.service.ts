@@ -8,7 +8,7 @@ export class AdminService {
   constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
 
   // ─── DASHBOARD ────────────────────────────
-  async getDashboard(period: string = 'week', country?: string) {
+  async getDashboard(period: string = 'week', country?: string, city?: string) {
     const now = new Date();
     const periodMap: Record<string, Date> = {
       day: new Date(now.getTime() - 24 * 60 * 60 * 1000),
@@ -17,21 +17,135 @@ export class AdminService {
     };
     const since = periodMap[period] ?? periodMap.week;
     const geoFilter = country ? { deliveryCountry: country } : {};
+    const cityFilter = city ? { deliveryCity: city } : {};
+    const baseWhere = { createdAt: { gte: since }, ...geoFilter, ...cityFilter };
 
-    const [orders, revenue, newUsers, newProfessionals, newDrivers, activeDeliveries, avgRating, cancelRate, rawOrders] = await Promise.all([
-      this.prisma.order.aggregate({ where: { createdAt: { gte: since }, ...geoFilter }, _count: true, _sum: { totalAmount: true } }),
+    // Statuses en cours = entre PAID et IN_DELIVERY exclus
+    const inProgressStatuses = ['ACCEPTED', 'IN_PREPARATION', 'READY_FOR_PICKUP', 'DRIVER_ASSIGNED', 'PICKED_UP', 'IN_DELIVERY'] as const;
+
+    const [
+      orders, revenue, newUsers, newProfessionals, newDrivers, activeDeliveries,
+      avgRating, cancelRate, rawOrders,
+      // ─── Nouveaux compteurs par statut ───
+      ordersToValidate, ordersInPreparation, ordersDelivered, ordersCancelled,
+      // ─── Nouveau bloc finance ─────────────
+      financeAgg, tipsAgg,
+      // ─── Livreurs actifs (qui ont livré sur la période) ───
+      activeDriversIds,
+      // ─── Répartition utilisateurs (pour le pie) ───
+      usersClientCount, usersProCount, usersDriverCount,
+      // ─── Top 5 ────────────────────────────
+      topCountriesRaw, topClientsRaw, topDriversRaw, topProsRaw,
+      // ─── Liste des villes distinctes (pour le dropdown filtre) ───
+      distinctCitiesRaw,
+    ] = await Promise.all([
+      this.prisma.order.aggregate({ where: baseWhere, _count: true, _sum: { totalAmount: true } }),
       this.prisma.transaction.aggregate({ where: { type: 'COMMISSION', createdAt: { gte: since } }, _sum: { amount: true } }),
       this.prisma.user.count({ where: { createdAt: { gte: since }, role: 'CLIENT', ...(country ? { countryCode: country } : {}) } }),
       this.prisma.professional.count({ where: { createdAt: { gte: since } } }),
       this.prisma.driver.count({ where: { createdAt: { gte: since } } }),
       this.prisma.delivery.count({ where: { status: { in: ['IN_DELIVERY','ASSIGNED'] } } }),
       this.prisma.review.aggregate({ _avg: { professionalRating: true } }),
-      this.prisma.order.count({ where: { status: 'CANCELLED', createdAt: { gte: since }, ...geoFilter } }),
+      this.prisma.order.count({ where: { ...baseWhere, status: 'CANCELLED' } }),
+      this.prisma.order.findMany({ where: baseWhere, select: { createdAt: true, totalAmount: true } }),
+      // Compteurs par statut
+      this.prisma.order.count({ where: { ...baseWhere, status: 'PAID' } }),
+      this.prisma.order.count({ where: { ...baseWhere, status: { in: inProgressStatuses as any } } }),
+      this.prisma.order.count({ where: { ...baseWhere, status: 'DELIVERED' } }),
+      this.prisma.order.count({ where: { ...baseWhere, status: 'CANCELLED' } }),
+      // Finance — agrégats sur DELIVERED uniquement (revenu réel)
+      this.prisma.order.aggregate({
+        where: { ...baseWhere, status: 'DELIVERED' },
+        _sum: { totalAmount: true, deliveryFee: true, commissionAmount: true, subtotal: true },
+      }),
+      // Pourboires livreurs
+      this.prisma.transaction.aggregate({
+        where: { type: 'TIP', createdAt: { gte: since }, ...(country ? { driver: { user: { countryCode: country } } } : {}) },
+        _sum: { amount: true },
+      }),
+      // Livreurs distincts qui ont effectué au moins une livraison sur la période
+      this.prisma.delivery.groupBy({
+        by: ['driverId'],
+        where: { status: 'DELIVERED', createdAt: { gte: since } },
+      }),
+      // User counts par rôle (pour pie chart)
+      this.prisma.user.count({ where: { role: 'CLIENT', ...(country ? { countryCode: country } : {}) } }),
+      this.prisma.user.count({ where: { role: 'PROFESSIONAL', ...(country ? { countryCode: country } : {}) } }),
+      this.prisma.user.count({ where: { role: 'DRIVER', ...(country ? { countryCode: country } : {}) } }),
+      // Top 5 pays par commandes livrées (sur TOUTE la période, indépendant du filtre country)
+      this.prisma.order.groupBy({
+        by: ['deliveryCountry'],
+        where: { createdAt: { gte: since }, status: 'DELIVERED', deliveryCountry: { not: null } },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+        orderBy: { _count: { deliveryCountry: 'desc' } },
+        take: 5,
+      }),
+      // Top 5 clients par commandes livrées
+      this.prisma.order.groupBy({
+        by: ['clientId'],
+        where: { ...baseWhere, status: 'DELIVERED' },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+        orderBy: { _count: { clientId: 'desc' } },
+        take: 5,
+      }),
+      // Top 5 livreurs par livraisons effectuées
+      this.prisma.delivery.groupBy({
+        by: ['driverId'],
+        where: { status: 'DELIVERED', createdAt: { gte: since } },
+        _count: { _all: true },
+        orderBy: { _count: { driverId: 'desc' } },
+        take: 5,
+      }),
+      // Top 5 professionnels par commandes livrées
+      this.prisma.order.groupBy({
+        by: ['professionalId'],
+        where: { ...baseWhere, status: 'DELIVERED' },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+        orderBy: { _count: { professionalId: 'desc' } },
+        take: 5,
+      }),
+      // Liste des villes distinctes (pour dropdown)
       this.prisma.order.findMany({
-        where: { createdAt: { gte: since }, ...geoFilter },
-        select: { createdAt: true, totalAmount: true },
+        where: { deliveryCity: { not: null }, ...geoFilter },
+        select: { deliveryCity: true },
+        distinct: ['deliveryCity'],
+        take: 100,
       }),
     ]);
+
+    // Enrichissement des tops avec les détails utilisateur/pro
+    const [topClientUsers, topDriverInfos, topProInfos, topDriverEarnings] = await Promise.all([
+      topClientsRaw.length
+        ? this.prisma.user.findMany({
+            where: { id: { in: topClientsRaw.map(c => c.clientId) } },
+            select: { id: true, name: true, firstName: true, phone: true },
+          })
+        : Promise.resolve([] as any[]),
+      topDriversRaw.length
+        ? this.prisma.driver.findMany({
+            where: { id: { in: topDriversRaw.map(d => d.driverId) } },
+            select: { id: true, user: { select: { name: true, firstName: true, phone: true } } },
+          })
+        : Promise.resolve([] as any[]),
+      topProsRaw.length
+        ? this.prisma.professional.findMany({
+            where: { id: { in: topProsRaw.map(p => p.professionalId) } },
+            select: { id: true, businessName: true, category: true, city: true },
+          })
+        : Promise.resolve([] as any[]),
+      // Gains des top livreurs (sum deliveryFee + tips)
+      topDriversRaw.length
+        ? this.prisma.order.aggregate({
+            where: { driverId: { in: topDriversRaw.map(d => d.driverId) }, status: 'DELIVERED', createdAt: { gte: since } },
+            _sum: { deliveryFee: true },
+          })
+        : Promise.resolve({ _sum: { deliveryFee: 0 } } as any),
+    ]);
+    // _ used to silence "unused var" lints — kept for future per-driver earnings breakdown
+    void topDriverEarnings;
 
     const bucketCount = period === 'month' ? 30 : period === 'day' ? 1 : 7;
     const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -57,8 +171,61 @@ export class AdminService {
       this.prisma.user.count({ where: { createdAt: { gte: prevSince, lt: since }, role: 'CLIENT', ...(country ? { countryCode: country } : {}) } }),
     ]);
 
+    // ─── Construction des Top 5 enrichis ──────────────────────────────────
+    const clientById = new Map(topClientUsers.map(u => [u.id, u]));
+    const driverById = new Map(topDriverInfos.map(d => [d.id, d]));
+    const proById    = new Map(topProInfos.map(p => [p.id, p]));
+
+    const topCountries = topCountriesRaw.map(c => ({
+      country: c.deliveryCountry,
+      ordersCount: c._count._all,
+      revenue: c._sum.totalAmount ?? 0,
+    }));
+
+    const topClients = topClientsRaw.map(c => {
+      const u = clientById.get(c.clientId);
+      return {
+        id: c.clientId,
+        name: [u?.firstName, u?.name].filter(Boolean).join(' ') || u?.phone || '—',
+        phone: u?.phone ?? null,
+        ordersCount: c._count._all,
+        totalSpent: c._sum.totalAmount ?? 0,
+      };
+    });
+
+    const topDrivers = topDriversRaw.map(d => {
+      const drv = driverById.get(d.driverId);
+      return {
+        id: d.driverId,
+        name: [drv?.user?.firstName, drv?.user?.name].filter(Boolean).join(' ') || drv?.user?.phone || '—',
+        phone: drv?.user?.phone ?? null,
+        deliveriesCount: d._count._all,
+      };
+    });
+
+    const topPros = topProsRaw.map(p => {
+      const pro = proById.get(p.professionalId);
+      return {
+        id: p.professionalId,
+        businessName: pro?.businessName ?? '—',
+        category: pro?.category ?? null,
+        city: pro?.city ?? null,
+        ordersCount: p._count._all,
+        revenue: p._sum.totalAmount ?? 0,
+      };
+    });
+
+    // ─── Finance ─────────────────────────────────────────────────────────
+    const f = financeAgg._sum;
+    const platformCommissions = Number(f.commissionAmount ?? 0);
+    const deliveryFees        = Number(f.deliveryFee ?? 0);
+    const driverTips          = Number(tipsAgg._sum.amount ?? 0);
+    const proRevenue          = Number(f.subtotal ?? 0) - platformCommissions;
+    const driverRevenue       = deliveryFees + driverTips;
+
     return {
       data: {
+        // ── Existant (préservé pour rétrocompatibilité) ──────────────────
         orders: { count: orders._count, revenue: orders._sum.totalAmount ?? 0 },
         commissions: revenue._sum.amount ?? 0,
         newUsers, newProfessionals, newDrivers, activeDeliveries,
@@ -70,6 +237,47 @@ export class AdminService {
           commissions: prevRevenue._sum.amount ?? 0,
           newUsers: prevUsers,
         },
+
+        // ── Nouveaux compteurs par statut ────────────────────────────────
+        counters: {
+          total: orders._count,
+          toValidate: ordersToValidate,
+          inPreparation: ordersInPreparation,
+          delivered: ordersDelivered,
+          cancelled: ordersCancelled,
+        },
+
+        // ── Bloc finance détaillé ────────────────────────────────────────
+        finance: {
+          revenue: Number(financeAgg._sum.totalAmount ?? 0),
+          deliveryFees,
+          platformCommissions,
+          proRevenue,
+          driverRevenue,
+          driverTips,
+        },
+
+        // ── Livreurs actifs sur la période ───────────────────────────────
+        activeDrivers: activeDriversIds.length,
+
+        // ── Répartition utilisateurs (pour pie chart) ────────────────────
+        usersByRole: [
+          { name: 'Clients',       value: usersClientCount },
+          { name: 'Professionnels', value: usersProCount },
+          { name: 'Livreurs',      value: usersDriverCount },
+        ],
+
+        // ── Tops ─────────────────────────────────────────────────────────
+        topCountries,
+        topClients,
+        topDrivers,
+        topPros,
+
+        // ── Listes pour les filtres dynamiques ───────────────────────────
+        distinctCities: distinctCitiesRaw
+          .map(c => c.deliveryCity)
+          .filter((v): v is string => !!v)
+          .sort((a, b) => a.localeCompare(b, 'fr')),
       },
     };
   }
