@@ -77,7 +77,7 @@ jobs:
             npm install --legacy-peer-deps
 
             echo "🗄️ Syncing database schema..."
-            npx prisma db push
+            npx prisma db push --accept-data-loss
 
             echo "🔧 Generating Prisma client (Prisma 7+ ne le fait PLUS auto après db push)..."
             # Sans cette étape, le client TS reste stale -> build échoue sur
