@@ -567,15 +567,30 @@ export class AdminService {
 
   // ─── DRIVER DETAIL + MISSIONS ────────────
   async getDriverDetail(id: string) {
-    const driver = await this.prisma.driver.findUnique({
-      where: { id },
-      include: {
-        user: { select: { id: true, name: true, firstName: true, phone: true, email: true, status: true, countryCode: true, createdAt: true, createdByAdmin: true, lastLoginAt: true } },
-        documents: true,
-      },
-    });
+    const [driver, tipStats] = await Promise.all([
+      this.prisma.driver.findUnique({
+        where: { id },
+        include: {
+          user: { select: { id: true, name: true, firstName: true, phone: true, email: true, status: true, countryCode: true, createdAt: true, createdByAdmin: true, lastLoginAt: true } },
+          documents: true,
+        },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { driverId: id, type: 'TIP' as any, status: 'COMPLETED' as any },
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
+    ]);
     if (!driver) throw new NotFoundException();
-    return { data: driver };
+    return {
+      data: {
+        ...driver,
+        tipStats: {
+          totalTips: tipStats._sum.amount ?? 0,
+          tipCount: tipStats._count.id ?? 0,
+        },
+      },
+    };
   }
 
   async getDriverMissions(id: string) {

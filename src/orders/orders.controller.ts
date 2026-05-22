@@ -54,4 +54,10 @@ export class OrdersController {
   reorder(@Param('id') id: string, @CurrentUser() user: any) {
     return this.ordersService.reorderFromPrevious(id, user.id);
   }
+
+  @Post(':id/tip')
+  @ApiOperation({ summary: 'Leave a tip for the driver after delivery' })
+  submitTip(@Param('id') id: string, @CurrentUser() user: any, @Body('amount') amount: number) {
+    return this.ordersService.submitTip(user.id, id, Number(amount));
+  }
 }

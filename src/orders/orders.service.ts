@@ -472,7 +472,7 @@ export class OrdersService {
     return { data: { prefilled: { professionalId: original.professionalId, items: original.items } } };
   }
 
-  private async applyPromoCode(code: string, userId: string, subtotal: number): Promise<number> {
+  private async applyPromoCode(code: string, _userId: string, subtotal: number): Promise<number> {
     const promo = await this.prisma.promoCode.findUnique({ where: { code } });
     if (!promo || !promo.isActive) throw new BadRequestException('Invalid promo code');
     if (promo.expiresAt && new Date() > promo.expiresAt) throw new BadRequestException('Promo code expired');
@@ -488,5 +488,40 @@ export class OrdersService {
 
     const discount = promo.type === 'PERCENTAGE' ? subtotal * (promo.value / 100) : promo.value;
     return discount;
+  }
+
+  async submitTip(clientId: string, orderId: string, amount: number) {
+    if (!amount || amount <= 0) throw new BadRequestException('Montant invalide');
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { delivery: true },
+    });
+
+    if (!order) throw new NotFoundException('Commande introuvable');
+    if (order.clientId !== clientId) throw new ForbiddenException();
+    if (order.status !== ('DELIVERED' as any)) throw new BadRequestException('Le pourboire est disponible uniquement après livraison');
+    if ((order as any).tipAmount > 0) throw new BadRequestException('Un pourboire a déjà été laissé pour cette commande');
+    if (!order.delivery?.driverId) throw new BadRequestException('Aucun livreur associé à cette commande');
+
+    const [updatedOrder] = await this.prisma.$transaction([
+      this.prisma.order.update({
+        where: { id: orderId },
+        data: { tipAmount: amount } as any,
+      }),
+      this.prisma.transaction.create({
+        data: {
+          driverId: order.delivery.driverId,
+          type: 'TIP' as any,
+          amount,
+          currency: order.currency,
+          status: 'COMPLETED' as any,
+          orderId,
+          description: `Pourboire commande #${orderId.slice(-8).toUpperCase()}`,
+        } as any,
+      }),
+    ]);
+
+    return updatedOrder;
   }
 }
