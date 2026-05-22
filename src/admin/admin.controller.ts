@@ -264,6 +264,9 @@ export class AdminController {
   @Get('referrals')
   getReferrals() { return this.adminService.getReferrals(); }
 
+  @Get('referral-links')
+  getReferralLinks() { return this.adminService.getReferralLinks(); }
+
   @Get('referral-config')
   getReferralConfig() { return this.adminService.getReferralConfig(); }
 

@@ -1045,7 +1045,12 @@ export class AdminService {
 
   // ─── REFERRAL ─────────────────────────────
   async getReferrals() {
-    const [referrals, total, pending, rewarded, totalCredits] = await Promise.all([
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    sixMonthsAgo.setDate(1);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
+
+    const [referrals, total, pending, rewarded, totalCreditsAgg, topRaw, recent] = await Promise.all([
       this.prisma.referral.findMany({
         include: {
           referrer: { select: { id: true, name: true, firstName: true, phone: true } },
@@ -1057,8 +1062,73 @@ export class AdminService {
       this.prisma.referral.count({ where: { status: 'PENDING' } }),
       this.prisma.referral.count({ where: { status: 'REWARDED' } }),
       this.prisma.walletTransaction.aggregate({ where: { type: 'REFERRAL_REWARD' as any }, _sum: { amount: true } }),
+      this.prisma.referral.groupBy({
+        by: ['referrerId'],
+        _count: { id: true },
+        where: { status: 'REWARDED' },
+        orderBy: { _count: { id: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.referral.findMany({
+        where: { createdAt: { gte: sixMonthsAgo } },
+        select: { createdAt: true, status: true },
+      }),
     ]);
-    return { data: { referrals, stats: { total, pending, rewarded, totalCredits: totalCredits._sum.amount ?? 0 } } };
+
+    // Top parrains enrichis
+    const topIds = topRaw.map(r => r.referrerId);
+    const [topUsers, topAllCounts] = topIds.length > 0 ? await Promise.all([
+      this.prisma.user.findMany({ where: { id: { in: topIds } }, select: { id: true, name: true, firstName: true, phone: true } }),
+      this.prisma.referral.groupBy({ by: ['referrerId'], _count: { id: true }, where: { referrerId: { in: topIds } } }),
+    ]) : [[], []];
+    const userMap = new Map(topUsers.map(u => [u.id, u]));
+    const allCountMap = new Map((topAllCounts as any[]).map(r => [r.referrerId, r._count.id]));
+    const topReferrers = topRaw.map(r => ({
+      user: userMap.get(r.referrerId),
+      rewarded: r._count.id,
+      total: allCountMap.get(r.referrerId) ?? r._count.id,
+    }));
+
+    // Tendance mensuelle (6 derniers mois)
+    const monthlyMap = new Map<string, { created: number; rewarded: number }>();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthlyMap.set(key, { created: 0, rewarded: 0 });
+    }
+    for (const r of recent) {
+      const d = new Date(r.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyMap.has(key)) {
+        const e = monthlyMap.get(key)!;
+        e.created++;
+        if (r.status === 'REWARDED') e.rewarded++;
+      }
+    }
+    const monthly = Array.from(monthlyMap.entries()).map(([month, v]) => ({ month, ...v }));
+    const conversionRate = total > 0 ? Math.round((rewarded / total) * 100) : 0;
+    const totalCredits = totalCreditsAgg._sum.amount ?? 0;
+
+    return { data: { referrals, stats: { total, pending, rewarded, totalCredits, conversionRate }, topReferrers, monthly } };
+  }
+
+  async getReferralLinks(limit = 100) {
+    const users = await (this.prisma.user as any).findMany({
+      where: { referralCode: { not: null } },
+      select: { id: true, name: true, firstName: true, phone: true, referralCode: true },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    if (!users.length) return { data: [] };
+    const ids = users.map((u: any) => u.id);
+    const [totalCounts, rewardedCounts] = await Promise.all([
+      this.prisma.referral.groupBy({ by: ['referrerId'], _count: { id: true }, where: { referrerId: { in: ids } } }),
+      this.prisma.referral.groupBy({ by: ['referrerId'], _count: { id: true }, where: { referrerId: { in: ids }, status: 'REWARDED' } }),
+    ]);
+    const totalMap = new Map((totalCounts as any[]).map(r => [r.referrerId, r._count.id]));
+    const rewardedMap = new Map((rewardedCounts as any[]).map(r => [r.referrerId, r._count.id]));
+    return { data: users.map((u: any) => ({ ...u, totalReferrals: totalMap.get(u.id) ?? 0, rewardedReferrals: rewardedMap.get(u.id) ?? 0 })) };
   }
 
   async getReferralConfig() {
