@@ -150,10 +150,26 @@ export class AdminController {
   // DRIVERS (all)
   @Get('drivers')
   getAllDrivers(@Query() query: any) {
+    const { page, limit, country, city, vehicleType, status } = query;
     const pagination = new PaginationDto();
-    if (query.page) pagination.page = Number(query.page);
-    if (query.limit) pagination.limit = Number(query.limit);
-    return this.adminService.getAllDrivers(pagination);
+    if (page) pagination.page = Number(page);
+    if (limit) pagination.limit = Number(limit);
+    return this.adminService.getAllDrivers(pagination, { country, city, vehicleType, status });
+  }
+
+  @Post('drivers')
+  createDriver(@Body() dto: any) {
+    return this.adminService.createDriver(dto);
+  }
+
+  @Patch('drivers/:id/info')
+  updateDriver(@Param('id') id: string, @Body() dto: any) {
+    return this.adminService.updateDriver(id, dto);
+  }
+
+  @Delete('drivers/:id')
+  deleteDriver(@Param('id') id: string) {
+    return this.adminService.deleteDriver(id);
   }
 
   // ORDERS

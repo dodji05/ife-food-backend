@@ -720,16 +720,98 @@ export class AdminService {
   }
 
   // ─── DRIVERS MANAGEMENT ───────────────────
-  async getAllDrivers(pagination?: PaginationDto) {
+  async getAllDrivers(pagination?: PaginationDto, filters?: { country?: string; city?: string; vehicleType?: string; status?: string }) {
+    const where: any = {};
+    if (filters?.country)     where.zoneCountry  = filters.country;
+    if (filters?.city)        where.zoneCity     = { contains: filters.city, mode: 'insensitive' };
+    if (filters?.vehicleType) where.vehicleType  = filters.vehicleType;
+    if (filters?.status)      where.status       = filters.status;
+
     const [drivers, total] = await Promise.all([
       this.prisma.driver.findMany({
-        include: { user: { select: { name: true, phone: true, email: true } } },
+        where,
+        include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
         orderBy: { createdAt: 'desc' },
-        skip: pagination?.skip, take: pagination?.limit ?? 100,
+        skip: pagination?.skip, take: pagination?.limit ?? 200,
       }),
-      this.prisma.driver.count(),
+      this.prisma.driver.count({ where }),
     ]);
     return { data: drivers, meta: { total } };
+  }
+
+  async createDriver(dto: any) {
+    const { phone, name, firstName, email, password, vehicleType, zoneCity, zoneCountry, licensePlate } = dto;
+    if (!phone) throw new BadRequestException('Le numéro de téléphone est obligatoire.');
+    const existing = await this.prisma.user.findUnique({ where: { phone } });
+    if (existing) throw new BadRequestException('Ce numéro de téléphone est déjà utilisé.');
+
+    const bcrypt = await import('bcrypt');
+    const hashed = await bcrypt.hash(password || phone, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        phone,
+        name: name || phone,
+        firstName: firstName || null,
+        email: email || null,
+        password: hashed,
+        role: 'DRIVER',
+        status: 'ACTIVE',
+      },
+    });
+
+    const driver = await this.prisma.driver.create({
+      data: {
+        userId: user.id,
+        vehicleType: vehicleType || 'MOTORCYCLE',
+        zoneCity: zoneCity || null,
+        zoneCountry: zoneCountry || 'BJ',
+        licensePlate: licensePlate || null,
+        status: 'PENDING',
+      },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+    });
+
+    return { data: driver };
+  }
+
+  async updateDriver(id: string, dto: any) {
+    const driver = await this.prisma.driver.findUnique({ where: { id } });
+    if (!driver) throw new NotFoundException('Livreur introuvable.');
+
+    const { name, firstName, email, vehicleType, zoneCity, zoneCountry, licensePlate } = dto;
+
+    if (name || firstName || email) {
+      await this.prisma.user.update({
+        where: { id: driver.userId },
+        data: {
+          ...(name !== undefined       ? { name }      : {}),
+          ...(firstName !== undefined  ? { firstName } : {}),
+          ...(email !== undefined      ? { email }     : {}),
+        },
+      });
+    }
+
+    const updated = await this.prisma.driver.update({
+      where: { id },
+      data: {
+        ...(vehicleType !== undefined  ? { vehicleType }  : {}),
+        ...(zoneCity !== undefined     ? { zoneCity }     : {}),
+        ...(zoneCountry !== undefined  ? { zoneCountry }  : {}),
+        ...(licensePlate !== undefined ? { licensePlate } : {}),
+      },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+    });
+
+    return { data: updated };
+  }
+
+  async deleteDriver(id: string) {
+    const driver = await this.prisma.driver.findUnique({ where: { id } });
+    if (!driver) throw new NotFoundException('Livreur introuvable.');
+    await this.prisma.driver.update({ where: { id }, data: { status: 'BANNED' as any } });
+    await this.prisma.user.update({ where: { id: driver.userId }, data: { status: 'BANNED' as any, deletedAt: new Date() } }).catch(() => {});
+    return { success: true };
   }
 
   // ─── ORDERS MANAGEMENT ────────────────────
