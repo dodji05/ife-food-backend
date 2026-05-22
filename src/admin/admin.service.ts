@@ -469,14 +469,6 @@ export class AdminService {
     return { data: user };
   }
 
-  async resetUserPin(id: string, pin: string) {
-    if (!pin || pin.length < 4) throw new BadRequestException('Le PIN doit contenir au moins 4 chiffres.');
-    const bcrypt = await import('bcrypt');
-    const pinHash = await bcrypt.hash(pin.trim(), 12);
-    await this.prisma.user.update({ where: { id }, data: { pinHash } });
-    return { success: true };
-  }
-
   async updateUserProfile(id: string, dto: {
     firstName?: string; name?: string; email?: string;
     countryCode?: string; currency?: string; phone?: string;
