@@ -36,7 +36,7 @@ const prisma = new PrismaClient({ adapter });
 const CLIENT_ID       = '87c82561-5947-4e6a-aef5-0fb365feee38';
 const PROFESSIONAL_ID = '443dc40f-8ebc-4b94-9e9e-d4c6accfe6e3';
 const OWNER_ID        = '3e3a45a4-e4fd-48e1-8ef0-3fce1dd6788f';
-const DRIVER_ID       = '611b1ef0-6221-4f09-8c62-1c0790d90b68';
+const DRIVER_ID       = '1c64e960-5f79-4c00-a9f6-80e196616aaf';
 
 // ── Constantes métier ──────────────────────────────────────────────────────
 const DEMO_TAG = '[DEMO-SEED]';
