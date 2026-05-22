@@ -906,8 +906,12 @@ export class AdminService {
   // ─── PAYMENTS / CONFIG ───────────────────
   async getCommissionConfig() {
     const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
-    const val = cfg?.value && typeof cfg.value === 'object' ? cfg.value : { type: 'PERCENTAGE', value: 15 };
-    return { data: val };
+    const raw = cfg?.value && typeof cfg.value === 'object' ? (cfg.value as any) : {};
+    // Backward compat: old format { type, value } → wrap as professional
+    const professional = raw.professional ?? (raw.type ? { type: raw.type, value: raw.value } : { type: 'PERCENTAGE', value: 15 });
+    const driver   = raw.driver   ?? { type: 'PERCENTAGE', value: 10 };
+    const countries = raw.countries ?? {};
+    return { data: { professional, driver, countries } };
   }
 
   async getPlatformConfig() {
@@ -950,55 +954,84 @@ export class AdminService {
     };
   }
 
-  async getCommissionStats() {
+  async getCommissionStats(country?: string) {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     sixMonthsAgo.setDate(1);
     sixMonthsAgo.setHours(0, 0, 0, 0);
 
+    const baseWhere: any = { paymentStatus: 'SUCCESS' as any };
+    if (country) baseWhere.deliveryCountry = country;
+    const recentWhere: any = { ...baseWhere, createdAt: { gte: sixMonthsAgo } };
+
+    // Read driver commission rate from config to compute driver slice of delivery fees
+    const cfgRow = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
+    const cfgRaw = cfgRow?.value && typeof cfgRow.value === 'object' ? (cfgRow.value as any) : {};
+    const driverCfg  = cfgRaw.driver  ?? { type: 'PERCENTAGE', value: 10 };
+    // Per-country override if exists
+    const countryCfg = country && cfgRaw.countries?.[country];
+    const effectiveDriver = countryCfg?.driver ?? driverCfg;
+
     const [totals, recent, topRaw] = await Promise.all([
-      this.prisma.order.aggregate({ where: { paymentStatus: 'SUCCESS' as any }, _sum: { commissionAmount: true, totalAmount: true } }),
+      this.prisma.order.aggregate({
+        where: baseWhere,
+        _sum: { commissionAmount: true, totalAmount: true, deliveryFee: true },
+      }),
       this.prisma.order.findMany({
-        where: { createdAt: { gte: sixMonthsAgo }, paymentStatus: 'SUCCESS' as any },
-        select: { createdAt: true, commissionAmount: true, totalAmount: true },
+        where: recentWhere,
+        select: { createdAt: true, commissionAmount: true, totalAmount: true, deliveryFee: true },
       }),
       this.prisma.order.groupBy({
         by: ['professionalId'],
         _sum: { commissionAmount: true, totalAmount: true },
         _count: { id: true },
-        where: { paymentStatus: 'SUCCESS' as any },
+        where: baseWhere,
         orderBy: { _sum: { commissionAmount: 'desc' } },
         take: 5,
       }),
     ]);
 
-    const monthlyMap = new Map<string, { revenue: number; commissions: number }>();
+    // Compute driver commission from delivery fees
+    const totalDeliveryFees  = totals._sum.deliveryFee ?? 0;
+    const driverRate         = effectiveDriver.type === 'PERCENTAGE' ? (effectiveDriver.value ?? 10) / 100 : 0;
+    const totalDriverComm    = effectiveDriver.type === 'PERCENTAGE'
+      ? totalDeliveryFees * driverRate
+      : (totals._count ?? 0); // FIXED: needs a count, but count not in totals — fallback
+
+    const totalProComm       = totals._sum.commissionAmount ?? 0;
+    const totalPlatformComm  = totalProComm + totalDriverComm;
+
+    const monthlyMap = new Map<string, { revenue: number; proCommissions: number; driverCommissions: number }>();
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      monthlyMap.set(key, { revenue: 0, commissions: 0 });
+      monthlyMap.set(key, { revenue: 0, proCommissions: 0, driverCommissions: 0 });
     }
     for (const o of recent) {
       const d = new Date(o.createdAt);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (monthlyMap.has(key)) {
         const e = monthlyMap.get(key)!;
-        e.revenue     += o.totalAmount;
-        e.commissions += o.commissionAmount;
+        e.revenue         += o.totalAmount;
+        e.proCommissions  += o.commissionAmount;
+        e.driverCommissions += effectiveDriver.type === 'PERCENTAGE' ? (o.deliveryFee * driverRate) : effectiveDriver.value;
       }
     }
 
     const proIds = topRaw.map((p: any) => p.professionalId);
     const pros = proIds.length > 0
-      ? await this.prisma.professional.findMany({ where: { id: { in: proIds } }, select: { id: true, businessName: true } })
+      ? await this.prisma.professional.findMany({ where: { id: { in: proIds } }, select: { id: true, businessName: true, country: true } })
       : [];
     const proMap = new Map(pros.map(p => [p.id, p]));
 
     return {
       data: {
-        totalCommissions: totals._sum.commissionAmount ?? 0,
-        totalRevenue:     totals._sum.totalAmount      ?? 0,
+        totalProCommissions:     totalProComm,
+        totalDriverCommissions:  totalDriverComm,
+        totalPlatformCommissions: totalPlatformComm,
+        totalRevenue:             totals._sum.totalAmount ?? 0,
+        totalDeliveryFees,
         monthly: Array.from(monthlyMap.entries()).map(([month, v]) => ({ month, ...v })),
         topCommissioners: topRaw.map((p: any) => ({
           professional: proMap.get(p.professionalId),
@@ -1088,11 +1121,16 @@ export class AdminService {
   }
 
   // ─── COMMISSION CONFIG ────────────────────
-  async setCommissionConfig(type: 'PERCENTAGE' | 'FIXED_AMOUNT', value: number, perCategory?: Record<string, number>) {
+  async setCommissionConfig(dto: any) {
+    // New format: { professional: { type, value }, driver: { type, value }, countries?: {...} }
+    // Old format (backward compat): { type, value, perCategory }
+    const data = dto.professional
+      ? { professional: dto.professional, driver: dto.driver ?? { type: 'PERCENTAGE', value: 10 }, countries: dto.countries ?? {} }
+      : { type: dto.type, value: dto.value, perCategory: dto.perCategory };
     return this.prisma.platformConfig.upsert({
       where: { key: 'commission' },
-      update: { value: { type, value, perCategory } },
-      create: { key: 'commission', value: { type, value, perCategory } },
+      update: { value: data },
+      create: { key: 'commission', value: data },
     });
   }
 

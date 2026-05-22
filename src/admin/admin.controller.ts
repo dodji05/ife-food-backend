@@ -202,8 +202,8 @@ export class AdminController {
   getCommission() { return this.adminService.getCommissionConfig(); }
 
   @Put('config/commission')
-  setCommission(@Body() body: { type: 'PERCENTAGE' | 'FIXED_AMOUNT'; value: number; perCategory?: any }) {
-    return this.adminService.setCommissionConfig(body.type, body.value, body.perCategory);
+  setCommission(@Body() body: any) {
+    return this.adminService.setCommissionConfig(body);
   }
 
   @Get('config/platform')
@@ -219,7 +219,7 @@ export class AdminController {
   getPaymentStats() { return this.adminService.getPaymentStats(); }
 
   @Get('payments/commissions')
-  getCommissionStats() { return this.adminService.getCommissionStats(); }
+  getCommissionStats(@Query('country') country?: string) { return this.adminService.getCommissionStats(country); }
 
   @Get('payments/delivery-fee-stats')
   getDeliveryFeeStats() { return this.adminService.getDeliveryFeeStats(); }
