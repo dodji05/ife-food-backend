@@ -12,6 +12,7 @@ export enum PaymentGatewayName {
   PAYPAL = 'PAYPAL',
   KKIAPAY = 'KKIAPAY',
   FEDAPAY = 'FEDAPAY',
+  CASH_ON_DELIVERY = 'CASH_ON_DELIVERY',
 }
 
 @Injectable()
@@ -93,6 +94,21 @@ export class PaymentsService {
       case PaymentGatewayName.KKIAPAY:
         paymentData = await this.kkiapay.initiatePayment(order.totalAmount, order.currency, orderId, order.client.phone);
         break;
+      case PaymentGatewayName.CASH_ON_DELIVERY: {
+        // Vérifie que COD est activé dans la config plateforme
+        const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
+        const gateways = (platformCfg?.value as any) ?? {};
+        if (gateways.CASH_ON_DELIVERY === false) throw new BadRequestException('Le paiement à la livraison n\'est pas disponible');
+        // Pas de passerelle en ligne — l'ordre est confirmé immédiatement.
+        // Le paiement réel est collecté par le livreur à la livraison.
+        await this.prisma.payment.upsert({
+          where: { orderId },
+          update: { status: 'PENDING' as any },
+          create: { orderId, gateway: 'CASH_ON_DELIVERY' as any, amount: order.totalAmount, currency: order.currency, gatewayRef: `cod_${orderId}`, status: 'PENDING' as any },
+        });
+        await this.confirmPayment(orderId, `cod_${orderId}`);
+        return { data: { method: 'CASH_ON_DELIVERY', orderId } };
+      }
       default:
         throw new BadRequestException(`Gateway ${gateway} not supported`);
     }
