@@ -488,8 +488,14 @@ export class AdminService {
     return { data: user };
   }
 
+  async getReferralCode(id: string) {
+    const user = (await this.prisma.user.findUnique({ where: { id } })) as any;
+    if (!user) throw new Error('Utilisateur introuvable.');
+    return { data: { referralCode: user.referralCode ?? null } };
+  }
+
   async ensureReferralCode(id: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = (await this.prisma.user.findUnique({ where: { id } })) as any;
     if (!user) throw new Error('Utilisateur introuvable.');
     if (user.referralCode) return { data: { referralCode: user.referralCode } };
     // Génère un code unique de 8 caractères (lettres + chiffres)
@@ -498,8 +504,8 @@ export class AdminService {
     do {
       code = Math.random().toString(36).substring(2, 10).toUpperCase();
       attempts++;
-    } while (attempts < 10 && await this.prisma.user.findUnique({ where: { referralCode: code } }));
-    const updated = await this.prisma.user.update({ where: { id }, data: { referralCode: code } });
+    } while (attempts < 10 && await (this.prisma.user as any).findUnique({ where: { referralCode: code } }));
+    const updated = (await this.prisma.user.update({ where: { id }, data: { referralCode: code } as any })) as any;
     return { data: { referralCode: updated.referralCode } };
   }
 
@@ -613,16 +619,104 @@ export class AdminService {
   }
 
   // ─── PROFESSIONALS MANAGEMENT ────────────
-  async getAllProfessionals(pagination?: PaginationDto) {
+  async getAllProfessionals(pagination?: PaginationDto, filters?: { country?: string; city?: string; category?: string; status?: string }) {
+    const where: any = {};
+    if (filters?.country)  where.country  = filters.country;
+    if (filters?.city)     where.city     = filters.city;
+    if (filters?.category) where.category = filters.category;
+    if (filters?.status)   where.status   = filters.status;
+
     const [professionals, total] = await Promise.all([
       this.prisma.professional.findMany({
-        include: { user: { select: { name: true, phone: true, email: true } } },
+        where,
+        include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
         orderBy: { createdAt: 'desc' },
-        skip: pagination?.skip, take: pagination?.limit ?? 100,
+        skip: pagination?.skip, take: pagination?.limit ?? 200,
       }),
-      this.prisma.professional.count(),
+      this.prisma.professional.count({ where }),
     ]);
     return { data: professionals, meta: { total } };
+  }
+
+  async createProfessional(dto: {
+    businessName: string; category: string; city: string; country: string; address: string;
+    lat?: number; lng?: number; phone?: string; email?: string; description?: string;
+    ownerPhone: string; ownerFirstName?: string; ownerName?: string;
+    ownerEmail?: string; ownerCountryCode?: string;
+  }) {
+    const existing = await this.prisma.user.findUnique({ where: { phone: dto.ownerPhone } });
+    if (existing) throw new Error(`Un compte existe déjà avec le numéro ${dto.ownerPhone}.`);
+    const user = await this.prisma.user.create({
+      data: {
+        phone: dto.ownerPhone,
+        phoneCountry: dto.ownerCountryCode || dto.country || 'BJ',
+        firstName: dto.ownerFirstName,
+        name: dto.ownerName,
+        email: dto.ownerEmail || undefined,
+        role: 'PROFESSIONAL' as any,
+        countryCode: dto.ownerCountryCode || dto.country || 'BJ',
+        currency: 'XOF',
+        status: 'ACTIVE' as any,
+      },
+    });
+    const pro = await this.prisma.professional.create({
+      data: {
+        userId: user.id,
+        businessName: dto.businessName,
+        category: dto.category as any,
+        city: dto.city,
+        country: dto.country,
+        address: dto.address,
+        lat: dto.lat ?? 0,
+        lng: dto.lng ?? 0,
+        phone: dto.phone,
+        email: dto.email,
+        description: dto.description,
+        status: 'VALIDATED' as any,
+      },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+    });
+    return { data: pro };
+  }
+
+  async updateProfessional(id: string, dto: {
+    businessName?: string; category?: string; city?: string; country?: string;
+    address?: string; phone?: string; email?: string; description?: string;
+    commissionRate?: number; deliveryRadiusKm?: number;
+  }) {
+    const pro = await this.prisma.professional.update({
+      where: { id },
+      data: {
+        ...(dto.businessName     !== undefined && { businessName:     dto.businessName }),
+        ...(dto.category         !== undefined && { category:         dto.category as any }),
+        ...(dto.city             !== undefined && { city:             dto.city }),
+        ...(dto.country          !== undefined && { country:          dto.country }),
+        ...(dto.address          !== undefined && { address:          dto.address }),
+        ...(dto.phone            !== undefined && { phone:            dto.phone }),
+        ...(dto.email            !== undefined && { email:            dto.email }),
+        ...(dto.description      !== undefined && { description:      dto.description }),
+        ...(dto.commissionRate   !== undefined && { commissionRate:   Number(dto.commissionRate) }),
+        ...(dto.deliveryRadiusKm !== undefined && { deliveryRadiusKm: Number(dto.deliveryRadiusKm) }),
+      },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+    });
+    return { data: pro };
+  }
+
+  async deleteProfessional(id: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { id } });
+    if (!pro) throw new Error('Établissement introuvable.');
+    await this.prisma.professional.update({ where: { id }, data: { status: 'BANNED' as any } });
+    await this.prisma.user.update({ where: { id: pro.userId }, data: { status: 'BANNED' as any, deletedAt: new Date() } }).catch(() => {});
+    return { success: true };
+  }
+
+  async getProPromoCodes(proId: string) {
+    const codes = await this.prisma.promoCode.findMany({
+      where: { professionalId: proId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data: codes };
   }
 
   // ─── DRIVERS MANAGEMENT ───────────────────

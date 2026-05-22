@@ -80,6 +80,11 @@ export class AdminController {
     return this.adminService.updateUserStatus(id, status);
   }
 
+  @Get('users/:id/referral-code')
+  getReferralCode(@Param('id') id: string) {
+    return this.adminService.getReferralCode(id);
+  }
+
   @Post('users/:id/referral-code')
   ensureReferralCode(@Param('id') id: string) {
     return this.adminService.ensureReferralCode(id);
@@ -115,10 +120,31 @@ export class AdminController {
   // PROFESSIONALS (all)
   @Get('professionals')
   getAllProfessionals(@Query() query: any) {
+    const { page, limit, country, city, category, status } = query;
     const pagination = new PaginationDto();
-    if (query.page) pagination.page = Number(query.page);
-    if (query.limit) pagination.limit = Number(query.limit);
-    return this.adminService.getAllProfessionals(pagination);
+    if (page) pagination.page = Number(page);
+    if (limit) pagination.limit = Number(limit);
+    return this.adminService.getAllProfessionals(pagination, { country, city, category, status });
+  }
+
+  @Post('professionals')
+  createProfessional(@Body() dto: any) {
+    return this.adminService.createProfessional(dto);
+  }
+
+  @Patch('professionals/:id/info')
+  updateProfessional(@Param('id') id: string, @Body() dto: any) {
+    return this.adminService.updateProfessional(id, dto);
+  }
+
+  @Delete('professionals/:id')
+  deleteProfessional(@Param('id') id: string) {
+    return this.adminService.deleteProfessional(id);
+  }
+
+  @Get('professionals/:id/promo-codes')
+  getProPromoCodes(@Param('id') id: string) {
+    return this.adminService.getProPromoCodes(id);
   }
 
   // DRIVERS (all)

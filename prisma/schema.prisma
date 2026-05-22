@@ -317,6 +317,7 @@ model Professional {
   reviews            Review[]
   favoriteDrivers    ProfessionalFavoriteDriver[]
   transactions       Transaction[]
+  promoCodes         PromoCode[]
 
   @@map("professionals")
 }
@@ -587,18 +588,20 @@ model Message {
 // ─── PROMO CODES ──────────────────────────────
 
 model PromoCode {
-  id        String    @id @default(uuid())
-  code      String    @unique
-  type      String
-  value     Float
-  minOrder  Float     @default(0)
-  maxUses   Int?
-  usesCount Int       @default(0)
-  perUser   Boolean   @default(false)
-  expiresAt DateTime?
-  countries String[]
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
+  id             String        @id @default(uuid())
+  code           String        @unique
+  type           String
+  value          Float
+  minOrder       Float         @default(0)
+  maxUses        Int?
+  usesCount      Int           @default(0)
+  perUser        Boolean       @default(false)
+  expiresAt      DateTime?
+  countries      String[]
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  professionalId String?
+  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: SetNull)
 
   @@map("promo_codes")
 }
