@@ -440,6 +440,69 @@ export class AdminService {
     return { success: true };
   }
 
+  async createUser(dto: {
+    phone: string; phoneCountry: string; firstName?: string; name?: string;
+    email?: string; role?: string; countryCode?: string; currency?: string;
+  }) {
+    const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
+    if (existing) throw new Error(`Le numéro ${dto.phone} est déjà utilisé.`);
+    const user = await this.prisma.user.create({
+      data: {
+        phone: dto.phone,
+        phoneCountry: dto.phoneCountry || dto.countryCode || 'BJ',
+        firstName: dto.firstName,
+        name: dto.name,
+        email: dto.email || undefined,
+        role: (dto.role as any) || 'CLIENT',
+        countryCode: dto.countryCode || 'BJ',
+        currency: dto.currency || 'XOF',
+        status: 'ACTIVE' as any,
+      },
+    });
+    return { data: user };
+  }
+
+  async updateUserProfile(id: string, dto: {
+    firstName?: string; name?: string; email?: string;
+    countryCode?: string; currency?: string; phone?: string;
+  }) {
+    if (dto.phone) {
+      const conflict = await this.prisma.user.findFirst({ where: { phone: dto.phone, NOT: { id } } });
+      if (conflict) throw new Error(`Le numéro ${dto.phone} est déjà utilisé.`);
+    }
+    if (dto.email) {
+      const conflict = await this.prisma.user.findFirst({ where: { email: dto.email, NOT: { id } } });
+      if (conflict) throw new Error(`L'email ${dto.email} est déjà utilisé.`);
+    }
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(dto.firstName !== undefined && { firstName: dto.firstName }),
+        ...(dto.name      !== undefined && { name: dto.name }),
+        ...(dto.email     !== undefined && { email: dto.email || null }),
+        ...(dto.countryCode !== undefined && { countryCode: dto.countryCode }),
+        ...(dto.currency    !== undefined && { currency: dto.currency }),
+        ...(dto.phone       !== undefined && { phone: dto.phone }),
+      },
+    });
+    return { data: user };
+  }
+
+  async ensureReferralCode(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new Error('Utilisateur introuvable.');
+    if (user.referralCode) return { data: { referralCode: user.referralCode } };
+    // Génère un code unique de 8 caractères (lettres + chiffres)
+    let code: string;
+    let attempts = 0;
+    do {
+      code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      attempts++;
+    } while (attempts < 10 && await this.prisma.user.findUnique({ where: { referralCode: code } }));
+    const updated = await this.prisma.user.update({ where: { id }, data: { referralCode: code } });
+    return { data: { referralCode: updated.referralCode } };
+  }
+
   // ─── CATALOGUE ADMIN ─────────────────────
   async getCatalogueForPro(proId: string) {
     const [professional, categories] = await Promise.all([

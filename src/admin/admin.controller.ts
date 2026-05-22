@@ -65,9 +65,24 @@ export class AdminController {
     return this.adminService.getUsers(role, pagination, country);
   }
 
+  @Post('users')
+  createUser(@Body() dto: any) {
+    return this.adminService.createUser(dto);
+  }
+
+  @Patch('users/:id/profile')
+  updateUserProfile(@Param('id') id: string, @Body() dto: any) {
+    return this.adminService.updateUserProfile(id, dto);
+  }
+
   @Patch('users/:id/status')
   updateUserStatus(@Param('id') id: string, @Body('status') status: string) {
     return this.adminService.updateUserStatus(id, status);
+  }
+
+  @Post('users/:id/referral-code')
+  ensureReferralCode(@Param('id') id: string) {
+    return this.adminService.ensureReferralCode(id);
   }
 
   @Delete('users/:id')
