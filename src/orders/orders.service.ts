@@ -130,20 +130,36 @@ export class OrdersService {
     const products = await this.prisma.product.findMany({ where: { id: { in: productIds } } });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const items = dto.items.map((item) => {
+    const baseItems = dto.items.map((item) => {
       const product = productMap.get(item.productId);
       if (!product || !product.isAvailable) throw new BadRequestException(`Product ${item.productId} unavailable`);
       return { ...item, unitPrice: product.price, totalPrice: product.price * item.quantity, product };
     });
 
-    const subtotal = items.reduce((sum, i) => sum + i.totalPrice, 0);
-
-    // Get commission config
+    // Get commission config (supports new format { professional: {type,value} } and legacy { type, value })
     const commissionConfig = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
-    const config = commissionConfig?.value as any;
+    const cfg = commissionConfig?.value as any;
+    const proCfg = cfg?.professional ?? cfg;
+
     let commissionAmount = 0;
-    if (config?.type === 'PERCENTAGE') commissionAmount = subtotal * (config.value / 100);
-    else if (config?.type === 'FIXED_AMOUNT') commissionAmount = config.value * items.length;
+    let orderItems = baseItems;
+
+    if (proCfg?.type === 'PERCENTAGE') {
+      const baseSubtotal = baseItems.reduce((sum, i) => sum + i.totalPrice, 0);
+      commissionAmount = baseSubtotal * (Number(proCfg.value) / 100);
+      // unitPrice = base price; subtotal = base price sum
+    } else if (proCfg?.type === 'FIXED_PER_DISH' || proCfg?.type === 'FIXED_AMOUNT') {
+      const fixedPerDish = Number(proCfg.value ?? 0);
+      commissionAmount = baseItems.reduce((sum, i) => sum + fixedPerDish * i.quantity, 0);
+      // Inflate unitPrice so OrderItem reflects what the client actually paid
+      orderItems = baseItems.map((i) => ({
+        ...i,
+        unitPrice: i.unitPrice + fixedPerDish,
+        totalPrice: i.totalPrice + fixedPerDish * i.quantity,
+      }));
+    }
+
+    const subtotal = orderItems.reduce((sum, i) => sum + i.totalPrice, 0);
 
     // Calculate delivery fee
     const professional = await this.prisma.professional.findUnique({ where: { id: dto.professionalId } });
@@ -181,7 +197,7 @@ export class OrdersService {
         paymentMethod: dto.paymentMethod as any,
         specialInstructions: dto.specialInstructions,
         items: {
-          create: items.map((i) => ({
+          create: orderItems.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
             unitPrice: i.unitPrice,

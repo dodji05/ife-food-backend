@@ -18,7 +18,28 @@ export class ProductsService {
   }
 
   async getCategories(professionalId: string) {
-    return this.prisma.productCategory.findMany({ where: { professionalId }, orderBy: { sortOrder: 'asc' }, include: { products: { where: { isAvailable: true } } } });
+    const [categories, cfgRow] = await Promise.all([
+      this.prisma.productCategory.findMany({
+        where: { professionalId },
+        orderBy: { sortOrder: 'asc' },
+        include: { products: { where: { isAvailable: true } } },
+      }),
+      this.prisma.platformConfig.findUnique({ where: { key: 'commission' } }),
+    ]);
+
+    const cfg = cfgRow?.value as any;
+    // Support new format { professional: {type, value} } and legacy { type, value }
+    const proCfg = cfg?.professional ?? cfg;
+    const isFixedPerDish = proCfg?.type === 'FIXED_PER_DISH' || proCfg?.type === 'FIXED_AMOUNT';
+    const fixedPerDish = isFixedPerDish ? Number(proCfg.value ?? 0) : 0;
+
+    if (fixedPerDish === 0) return categories;
+
+    // Inflate product prices transparently for client-facing display
+    return categories.map((cat: any) => ({
+      ...cat,
+      products: cat.products.map((p: any) => ({ ...p, price: p.price + fixedPerDish })),
+    }));
   }
 
   // ── Catégories : update + delete + reorder ─────────────────────────────────
@@ -83,14 +104,9 @@ export class ProductsService {
   async createProduct(userId: string, dto: CreateProductDto) {
     const prof = await this.prisma.professional.findUnique({ where: { userId } });
     if (!prof) throw new NotFoundException('Professional profile not found');
-
-    // If commission is fixed amount, add it to price
-    const commissionConfig = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
-    const config = commissionConfig?.value as any;
-    const displayPrice = config?.type === 'FIXED_AMOUNT' ? dto.price + config.value : dto.price;
-
+    // Always store base price; commission is applied at read time (getCategories)
     return this.prisma.product.create({
-      data: { ...dto, professionalId: prof.id, price: displayPrice, name: dto.name, description: dto.description },
+      data: { ...dto, professionalId: prof.id },
     });
   }
 
