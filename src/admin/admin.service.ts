@@ -987,7 +987,7 @@ export class AdminService {
     const countryCfg = country && cfgRaw.countries?.[country];
     const effectiveDriver = countryCfg?.driver ?? driverCfg;
 
-    const [totals, recent, topRaw] = await Promise.all([
+    const [totals, recent, topRaw, totalOrderCount] = await Promise.all([
       this.prisma.order.aggregate({
         where: baseWhere,
         _sum: { commissionAmount: true, totalAmount: true, deliveryFee: true },
@@ -1004,14 +1004,15 @@ export class AdminService {
         orderBy: { _sum: { commissionAmount: 'desc' } },
         take: 5,
       }),
+      this.prisma.order.count({ where: baseWhere }),
     ]);
 
     // Compute driver commission from delivery fees
     const totalDeliveryFees  = totals._sum.deliveryFee ?? 0;
     const driverRate         = effectiveDriver.type === 'PERCENTAGE' ? (effectiveDriver.value ?? 10) / 100 : 0;
     const totalDriverComm    = effectiveDriver.type === 'PERCENTAGE'
-      ? totalDeliveryFees * driverRate
-      : (totals._count ?? 0); // FIXED: needs a count, but count not in totals — fallback
+      ? Math.round(totalDeliveryFees * driverRate)
+      : Math.round(totalOrderCount * (effectiveDriver.value ?? 0));
 
     const totalProComm       = totals._sum.commissionAmount ?? 0;
     const totalPlatformComm  = totalProComm + totalDriverComm;
@@ -1028,9 +1029,11 @@ export class AdminService {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (monthlyMap.has(key)) {
         const e = monthlyMap.get(key)!;
-        e.revenue         += o.totalAmount;
-        e.proCommissions  += o.commissionAmount;
-        e.driverCommissions += effectiveDriver.type === 'PERCENTAGE' ? (o.deliveryFee * driverRate) : effectiveDriver.value;
+        e.revenue         += Number(o.totalAmount ?? 0);
+        e.proCommissions  += Number(o.commissionAmount ?? 0);
+        e.driverCommissions += effectiveDriver.type === 'PERCENTAGE'
+          ? Math.round(Number(o.deliveryFee ?? 0) * driverRate)
+          : (effectiveDriver.value ?? 0);
       }
     }
 
@@ -1502,6 +1505,9 @@ export class AdminService {
   }
 
   async createAdminAccount(dto: { name: string; firstName?: string; email: string; phone: string; level: string; pin: string }) {
+    const VALID_LEVELS = ['SUPER_ADMIN', 'ADMIN', 'SUPPORT', 'MODERATOR', 'ANALYST'];
+    if (!VALID_LEVELS.includes(dto.level)) throw new BadRequestException('Niveau admin invalide');
+    if (!/^\d{4,}$/.test(dto.pin)) throw new BadRequestException('Le PIN doit contenir au minimum 4 chiffres');
     const existing = await this.prisma.user.findFirst({ where: { OR: [{ email: dto.email }, { phone: dto.phone }] } });
     if (existing) throw new BadRequestException('Email ou téléphone déjà utilisé');
     const bcrypt = await import('bcrypt');
@@ -1523,6 +1529,8 @@ export class AdminService {
   }
 
   async updateAdminAccount(id: string, dto: { name?: string; firstName?: string; email?: string; phone?: string; level?: string }) {
+    const VALID_LEVELS = ['SUPER_ADMIN', 'ADMIN', 'SUPPORT', 'MODERATOR', 'ANALYST'];
+    if (dto.level && !VALID_LEVELS.includes(dto.level)) throw new BadRequestException('Niveau admin invalide');
     const admin = await this.prisma.admin.findFirst({ where: { userId: id } });
     if (!admin) throw new NotFoundException('Compte admin introuvable');
     const [user] = await this.prisma.$transaction([

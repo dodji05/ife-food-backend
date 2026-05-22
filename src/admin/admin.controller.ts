@@ -3,6 +3,8 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { AdminLevelGuard } from '../common/guards/admin-level.guard';
+import { AdminLevel } from '../common/decorators/admin-level.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -202,6 +204,8 @@ export class AdminController {
   getCommission() { return this.adminService.getCommissionConfig(); }
 
   @Put('config/commission')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
   setCommission(@Body() body: any) {
     return this.adminService.setCommissionConfig(body);
   }
@@ -210,6 +214,8 @@ export class AdminController {
   getPlatform() { return this.adminService.getPlatformConfig(); }
 
   @Put('config/payment-gateways')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
   setGateways(@Body() body: Record<string, boolean>) {
     return this.adminService.setPaymentGateways(body);
   }
@@ -310,6 +316,8 @@ export class AdminController {
   getUserWallet(@Param('id') id: string) { return this.adminService.getUserWallet(id); }
 
   @Post('users/:id/wallet/adjust')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN', 'ADMIN')
   adjustWallet(@Param('id') id: string, @Body() body: { amount: number; type: 'ADMIN_CREDIT' | 'ADMIN_DEBIT'; description?: string }) {
     return this.adminService.adjustWallet(id, body.amount, body.type, body.description);
   }
@@ -378,19 +386,29 @@ export class AdminController {
 
   // COMPTES ADMIN
   @Get('admins')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
   getAdmins() { return this.adminService.getAdmins(); }
 
   @Post('admins')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
   createAdminAccount(@Body() dto: any) { return this.adminService.createAdminAccount(dto); }
 
   @Patch('admins/:id')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
   updateAdminAccount(@Param('id') id: string, @Body() dto: any) { return this.adminService.updateAdminAccount(id, dto); }
 
   @Patch('admins/:id/status')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
   toggleAdminStatus(@Param('id') id: string, @Body('status') status: 'ACTIVE' | 'SUSPENDED') {
     return this.adminService.toggleAdminStatus(id, status);
   }
 
   @Delete('admins/:id')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
   deleteAdminAccount(@Param('id') id: string) { return this.adminService.deleteAdminAccount(id); }
 }
