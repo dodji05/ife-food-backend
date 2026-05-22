@@ -28,8 +28,14 @@ export class AdminController {
   // ANALYTICS
   @Get('analytics')
   @ApiOperation({ summary: 'Get advanced analytics' })
-  getAnalytics(@Query('period') period: string, @Query('country') country?: string) {
-    return this.adminService.getAnalytics(period, country);
+  getAnalytics(
+    @Query('period') period: string,
+    @Query('country') country?: string,
+    @Query('city') city?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.adminService.getAnalytics(period, country, city, from, to);
   }
 
   // VALIDATIONS

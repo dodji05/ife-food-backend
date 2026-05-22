@@ -283,16 +283,33 @@ export class AdminService {
   }
 
   // ─── ANALYTICS ───────────────────────────
-  async getAnalytics(period: string = 'month', country?: string) {
+  async getAnalytics(period: string = 'month', country?: string, city?: string, from?: string, to?: string) {
     const now = new Date();
-    const periodMap: Record<string, Date> = {
-      day: new Date(now.getTime() - 24 * 60 * 60 * 1000),
-      week: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-      month: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-    };
-    const since = periodMap[period] ?? periodMap.month;
-    const geoFilter = country ? { deliveryCountry: country } : {};
-    const baseWhere = { createdAt: { gte: since }, ...geoFilter };
+    let since: Date;
+    let until: Date | undefined;
+
+    if (from && to) {
+      since = new Date(from);
+      until = new Date(to);
+      // Inclure toute la journée de fin
+      until.setHours(23, 59, 59, 999);
+    } else {
+      const periodMap: Record<string, Date> = {
+        day: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+        week: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+        month: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+      };
+      since = periodMap[period] ?? periodMap.month;
+    }
+
+    const geoFilter: any = {};
+    if (country) geoFilter.deliveryCountry = country;
+    if (city)    geoFilter.deliveryCity = city;
+
+    const dateFilter: any = { gte: since };
+    if (until) dateFilter.lte = until;
+
+    const baseWhere = { createdAt: dateFilter, ...geoFilter };
 
     const [totalOrders, deliveredOrders, cancelledOrders, avgBasket, avgEstDelivery, ordersByCountry, ordersWithPro] = await Promise.all([
       this.prisma.order.count({ where: baseWhere }),
