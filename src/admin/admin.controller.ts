@@ -80,6 +80,11 @@ export class AdminController {
     return this.adminService.updateUserStatus(id, status);
   }
 
+  @Patch('users/:id/pin')
+  resetUserPin(@Param('id') id: string, @Body('pin') pin: string) {
+    return this.adminService.resetUserPin(id, pin);
+  }
+
   @Get('users/:id/referral-code')
   getReferralCode(@Param('id') id: string) {
     return this.adminService.getReferralCode(id);

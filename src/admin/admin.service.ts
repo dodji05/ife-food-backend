@@ -441,11 +441,17 @@ export class AdminService {
   }
 
   async createUser(dto: {
-    phone: string; phoneCountry: string; firstName?: string; name?: string;
+    phone: string; phoneCountry?: string; firstName?: string; name?: string;
     email?: string; role?: string; countryCode?: string; currency?: string;
+    pin?: string;
   }) {
     const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
     if (existing) throw new Error(`Le numéro ${dto.phone} est déjà utilisé.`);
+
+    const bcrypt = await import('bcrypt');
+    const pinRaw = dto.pin?.trim() || '0000';
+    const pinHash = await bcrypt.hash(pinRaw, 12);
+
     const user = await this.prisma.user.create({
       data: {
         phone: dto.phone,
@@ -457,9 +463,18 @@ export class AdminService {
         countryCode: dto.countryCode || 'BJ',
         currency: dto.currency || 'XOF',
         status: 'ACTIVE' as any,
+        pinHash,
       },
     });
     return { data: user };
+  }
+
+  async resetUserPin(id: string, pin: string) {
+    if (!pin || pin.length < 4) throw new BadRequestException('Le PIN doit contenir au moins 4 chiffres.');
+    const bcrypt = await import('bcrypt');
+    const pinHash = await bcrypt.hash(pin.trim(), 12);
+    await this.prisma.user.update({ where: { id }, data: { pinHash } });
+    return { success: true };
   }
 
   async updateUserProfile(id: string, dto: {
@@ -642,10 +657,15 @@ export class AdminService {
     businessName: string; category: string; city: string; country: string; address: string;
     lat?: number; lng?: number; phone?: string; email?: string; description?: string;
     ownerPhone: string; ownerFirstName?: string; ownerName?: string;
-    ownerEmail?: string; ownerCountryCode?: string;
+    ownerEmail?: string; ownerCountryCode?: string; ownerPin?: string;
   }) {
     const existing = await this.prisma.user.findUnique({ where: { phone: dto.ownerPhone } });
     if (existing) throw new Error(`Un compte existe déjà avec le numéro ${dto.ownerPhone}.`);
+
+    const bcrypt = await import('bcrypt');
+    const pinRaw = dto.ownerPin?.trim() || '0000';
+    const pinHash = await bcrypt.hash(pinRaw, 12);
+
     const user = await this.prisma.user.create({
       data: {
         phone: dto.ownerPhone,
@@ -657,6 +677,7 @@ export class AdminService {
         countryCode: dto.ownerCountryCode || dto.country || 'BJ',
         currency: 'XOF',
         status: 'ACTIVE' as any,
+        pinHash,
       },
     });
     const pro = await this.prisma.professional.create({
@@ -740,23 +761,27 @@ export class AdminService {
   }
 
   async createDriver(dto: any) {
-    const { phone, name, firstName, email, password, vehicleType, zoneCity, zoneCountry, licensePlate } = dto;
+    const { phone, name, firstName, email, pin, vehicleType, zoneCity, zoneCountry, licensePlate } = dto;
     if (!phone) throw new BadRequestException('Le numéro de téléphone est obligatoire.');
     const existing = await this.prisma.user.findUnique({ where: { phone } });
     if (existing) throw new BadRequestException('Ce numéro de téléphone est déjà utilisé.');
 
     const bcrypt = await import('bcrypt');
-    const hashed = await bcrypt.hash(password || phone, 10);
+    const pinRaw = pin?.trim() || '0000';
+    const pinHash = await bcrypt.hash(pinRaw, 12);
 
     const user = await this.prisma.user.create({
       data: {
         phone,
+        phoneCountry: zoneCountry || 'BJ',
         name: name || phone,
         firstName: firstName || null,
         email: email || null,
-        password: hashed,
-        role: 'DRIVER',
-        status: 'ACTIVE',
+        role: 'DRIVER' as any,
+        countryCode: zoneCountry || 'BJ',
+        currency: 'XOF',
+        status: 'ACTIVE' as any,
+        pinHash,
       },
     });
 
