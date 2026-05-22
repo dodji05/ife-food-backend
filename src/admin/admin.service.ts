@@ -998,12 +998,29 @@ export class AdminService {
 
   // ─── DELIVERY ZONES ───────────────────────
   async getDeliveryZones() {
-    return this.prisma.deliveryZone.findMany();
+    return this.prisma.deliveryZone.findMany({ orderBy: { createdAt: 'asc' } });
   }
 
   async upsertDeliveryZone(dto: any) {
-    if (dto.id) return this.prisma.deliveryZone.update({ where: { id: dto.id }, data: dto });
-    return this.prisma.deliveryZone.create({ data: dto });
+    const { id, name, country, fromCity, toCity, baseFee, perKmFee, currency, weatherMultiplier, isActive } = dto;
+    const data = {
+      name: name ?? '',
+      country: country ?? 'BJ',
+      fromCity: fromCity || null,
+      toCity: toCity || null,
+      baseFee: Number(baseFee ?? 0),
+      perKmFee: Number(perKmFee ?? 0),
+      currency: currency ?? 'XOF',
+      weatherMultiplier: Number(weatherMultiplier ?? 1),
+      isActive: isActive !== false,
+    };
+    if (id) return this.prisma.deliveryZone.update({ where: { id }, data });
+    return this.prisma.deliveryZone.create({ data });
+  }
+
+  async deleteDeliveryZone(id: string) {
+    await this.prisma.deliveryZone.delete({ where: { id } });
+    return { success: true };
   }
 
   // ─── PUSH BROADCAST ───────────────────────

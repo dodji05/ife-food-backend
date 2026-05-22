@@ -312,6 +312,9 @@ export class AdminController {
   @Post('delivery-zones')
   upsertDeliveryZone(@Body() dto: any) { return this.adminService.upsertDeliveryZone(dto); }
 
+  @Delete('delivery-zones/:id')
+  deleteDeliveryZone(@Param('id') id: string) { return this.adminService.deleteDeliveryZone(id); }
+
   // NOTIFICATIONS
   @Post('notifications/broadcast')
   broadcast(@Body() body: { title: string; body: string; role?: string; countries?: string[] }) {
