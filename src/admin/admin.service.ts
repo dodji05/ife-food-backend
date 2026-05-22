@@ -931,7 +931,7 @@ export class AdminService {
 
   async getPlatformConfig() {
     const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
-    return { data: { paymentGateways: cfg?.value ?? { STRIPE: true, PAYPAL: true, KKIAPAY: true, FEDAPAY: true } } };
+    return { data: { paymentGateways: cfg?.value ?? { STRIPE: true, PAYPAL: true, KKIAPAY: true, FEDAPAY: true, CASH_ON_DELIVERY: true } } };
   }
 
   async getPaymentStats() {
@@ -1112,6 +1112,12 @@ export class AdminService {
     if (filters.type)   where.type   = filters.type;
     if (filters.status) where.status = filters.status;
     if (filters.from && filters.to) where.createdAt = { gte: new Date(filters.from), lte: new Date(filters.to) };
+    if (filters.country) {
+      where.OR = [
+        { driver: { user: { countryCode: filters.country } } },
+        { professional: { user: { countryCode: filters.country } } },
+      ];
+    }
 
     const [transactions, total] = await Promise.all([
       this.prisma.transaction.findMany({

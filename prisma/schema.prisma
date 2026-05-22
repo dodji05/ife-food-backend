@@ -96,6 +96,7 @@ enum PaymentGateway {
   PAYPAL
   KKIAPAY
   FEDAPAY
+  CASH_ON_DELIVERY
   OTHER
 }
 
