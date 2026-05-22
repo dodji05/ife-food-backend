@@ -30,8 +30,19 @@ enum UserStatus {
 enum AdminLevel {
   SUPER_ADMIN
   ADMIN
+  SUPPORT
   MODERATOR
   ANALYST
+}
+
+model Country {
+  code     String  @id
+  name     String
+  emoji    String?
+  currency String  @default("XOF")
+  isActive Boolean @default(true)
+
+  @@map("countries")
 }
 
 enum ProfessionalCategory {

@@ -359,4 +359,38 @@ export class AdminController {
   getFinancialReport(@Query('from') from: string, @Query('to') to: string) {
     return this.adminService.getFinancialReport(from, to);
   }
+
+  // PAYS
+  @Get('config/countries')
+  getCountries() { return this.adminService.getCountries(); }
+
+  @Patch('config/countries/:code/toggle')
+  toggleCountry(@Param('code') code: string) { return this.adminService.toggleCountry(code); }
+
+  // DEVISES
+  @Get('config/currencies')
+  getCurrencies() { return this.adminService.getCurrencies(); }
+
+  @Put('config/currencies')
+  upsertCurrencies(@Body() body: { rates: { fromCurrency: string; rate: number }[] }) {
+    return this.adminService.upsertCurrencies(body.rates);
+  }
+
+  // COMPTES ADMIN
+  @Get('admins')
+  getAdmins() { return this.adminService.getAdmins(); }
+
+  @Post('admins')
+  createAdminAccount(@Body() dto: any) { return this.adminService.createAdminAccount(dto); }
+
+  @Patch('admins/:id')
+  updateAdminAccount(@Param('id') id: string, @Body() dto: any) { return this.adminService.updateAdminAccount(id, dto); }
+
+  @Patch('admins/:id/status')
+  toggleAdminStatus(@Param('id') id: string, @Body('status') status: 'ACTIVE' | 'SUSPENDED') {
+    return this.adminService.toggleAdminStatus(id, status);
+  }
+
+  @Delete('admins/:id')
+  deleteAdminAccount(@Param('id') id: string) { return this.adminService.deleteAdminAccount(id); }
 }

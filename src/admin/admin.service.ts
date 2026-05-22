@@ -1425,4 +1425,129 @@ export class AdminService {
     ]);
     return { data: { balance: wallet.balance + delta } };
   }
+
+  // ─── PAYS ─────────────────────────────────
+  private readonly DEFAULT_COUNTRIES = [
+    { code: 'BJ', name: 'Bénin',           emoji: '🇧🇯', currency: 'XOF' },
+    { code: 'SN', name: 'Sénégal',          emoji: '🇸🇳', currency: 'XOF' },
+    { code: 'CI', name: "Côte d'Ivoire",    emoji: '🇨🇮', currency: 'XOF' },
+    { code: 'TG', name: 'Togo',             emoji: '🇹🇬', currency: 'XOF' },
+    { code: 'ML', name: 'Mali',             emoji: '🇲🇱', currency: 'XOF' },
+    { code: 'BF', name: 'Burkina Faso',     emoji: '🇧🇫', currency: 'XOF' },
+    { code: 'NE', name: 'Niger',            emoji: '🇳🇪', currency: 'XOF' },
+    { code: 'GN', name: 'Guinée',           emoji: '🇬🇳', currency: 'GNF' },
+    { code: 'CM', name: 'Cameroun',         emoji: '🇨🇲', currency: 'XAF' },
+    { code: 'GA', name: 'Gabon',            emoji: '🇬🇦', currency: 'XAF' },
+    { code: 'NG', name: 'Nigeria',          emoji: '🇳🇬', currency: 'NGN' },
+    { code: 'GH', name: 'Ghana',            emoji: '🇬🇭', currency: 'GHS' },
+  ];
+
+  async getCountries() {
+    let countries = await (this.prisma as any).country.findMany({ orderBy: { name: 'asc' } });
+    if (countries.length === 0) {
+      await (this.prisma as any).country.createMany({ data: this.DEFAULT_COUNTRIES, skipDuplicates: true });
+      countries = await (this.prisma as any).country.findMany({ orderBy: { name: 'asc' } });
+    }
+    return { data: countries };
+  }
+
+  async toggleCountry(code: string) {
+    const country = await (this.prisma as any).country.findUnique({ where: { code } });
+    if (!country) throw new NotFoundException('Pays introuvable');
+    const updated = await (this.prisma as any).country.update({
+      where: { code },
+      data: { isActive: !country.isActive },
+    });
+    return { data: updated };
+  }
+
+  // ─── DEVISES ──────────────────────────────
+  private readonly DEFAULT_CURRENCIES = [
+    { fromCurrency: 'EUR', toCurrency: 'XOF', rate: 655.957 },
+    { fromCurrency: 'USD', toCurrency: 'XOF', rate: 610.0   },
+    { fromCurrency: 'GBP', toCurrency: 'XOF', rate: 780.0   },
+    { fromCurrency: 'GHS', toCurrency: 'XOF', rate: 42.0    },
+    { fromCurrency: 'NGN', toCurrency: 'XOF', rate: 0.38    },
+    { fromCurrency: 'XAF', toCurrency: 'XOF', rate: 1.0     },
+  ];
+
+  async getCurrencies() {
+    let rates = await this.prisma.exchangeRate.findMany({ where: { toCurrency: 'XOF' }, orderBy: { fromCurrency: 'asc' } });
+    if (rates.length === 0) {
+      await this.prisma.exchangeRate.createMany({ data: this.DEFAULT_CURRENCIES, skipDuplicates: true });
+      rates = await this.prisma.exchangeRate.findMany({ where: { toCurrency: 'XOF' }, orderBy: { fromCurrency: 'asc' } });
+    }
+    return { data: { base: 'XOF', rates } };
+  }
+
+  async upsertCurrencies(entries: { fromCurrency: string; rate: number }[]) {
+    await Promise.all(entries.map(e =>
+      this.prisma.exchangeRate.upsert({
+        where: { fromCurrency_toCurrency: { fromCurrency: e.fromCurrency, toCurrency: 'XOF' } },
+        update: { rate: e.rate },
+        create: { fromCurrency: e.fromCurrency, toCurrency: 'XOF', rate: e.rate },
+      }),
+    ));
+    return this.getCurrencies();
+  }
+
+  // ─── COMPTES ADMIN ────────────────────────
+  async getAdmins() {
+    const users = await this.prisma.user.findMany({
+      where: { role: 'ADMIN' as any },
+      include: { admin: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data: users };
+  }
+
+  async createAdminAccount(dto: { name: string; firstName?: string; email: string; phone: string; level: string; pin: string }) {
+    const existing = await this.prisma.user.findFirst({ where: { OR: [{ email: dto.email }, { phone: dto.phone }] } });
+    if (existing) throw new BadRequestException('Email ou téléphone déjà utilisé');
+    const bcrypt = await import('bcrypt');
+    const pinHash = await bcrypt.hash(dto.pin, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        name: dto.name,
+        firstName: dto.firstName,
+        email: dto.email,
+        phone: dto.phone,
+        pinHash,
+        role: 'ADMIN' as any,
+        status: 'ACTIVE' as any,
+        createdByAdmin: true,
+      } as any,
+    });
+    const admin = await this.prisma.admin.create({ data: { userId: user.id, level: dto.level as any } });
+    return { data: { ...user, admin } };
+  }
+
+  async updateAdminAccount(id: string, dto: { name?: string; firstName?: string; email?: string; phone?: string; level?: string }) {
+    const admin = await this.prisma.admin.findFirst({ where: { userId: id } });
+    if (!admin) throw new NotFoundException('Compte admin introuvable');
+    const [user] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id },
+        data: { name: dto.name, firstName: dto.firstName, email: dto.email, phone: dto.phone } as any,
+      }),
+      ...(dto.level ? [this.prisma.admin.update({ where: { userId: id }, data: { level: dto.level as any } })] : []),
+    ]);
+    return { data: user };
+  }
+
+  async toggleAdminStatus(id: string, status: 'ACTIVE' | 'SUSPENDED') {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user || user.role !== ('ADMIN' as any)) throw new NotFoundException('Compte admin introuvable');
+    return this.prisma.user.update({ where: { id }, data: { status: status as any } });
+  }
+
+  async deleteAdminAccount(id: string) {
+    const admin = await this.prisma.admin.findFirst({ where: { userId: id } });
+    if (!admin) throw new NotFoundException('Compte admin introuvable');
+    await this.prisma.$transaction([
+      this.prisma.admin.delete({ where: { userId: id } }),
+      this.prisma.user.delete({ where: { id } }),
+    ]);
+    return { data: { deleted: true } };
+  }
 }
