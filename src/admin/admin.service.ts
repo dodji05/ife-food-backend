@@ -373,7 +373,7 @@ export class AdminService {
   async getPendingProfessionals() {
     return this.prisma.professional.findMany({
       where: { status: 'PENDING' },
-      include: { user: { select: { name: true, phone: true, email: true } }, documents: true },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } }, documents: true },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -384,7 +384,7 @@ export class AdminService {
   async getPendingDrivers() {
     return this.prisma.driver.findMany({
       where: { status: 'PENDING' },
-      include: { user: { select: { name: true, phone: true, email: true } }, documents: true },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } }, documents: true },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -464,6 +464,7 @@ export class AdminService {
         currency: dto.currency || 'XOF',
         status: 'ACTIVE' as any,
         pinHash,
+        createdByAdmin: true,
       },
     });
     return { data: user };
@@ -569,7 +570,7 @@ export class AdminService {
     const driver = await this.prisma.driver.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, name: true, phone: true, email: true, status: true, countryCode: true, createdAt: true } },
+        user: { select: { id: true, name: true, firstName: true, phone: true, email: true, status: true, countryCode: true, createdAt: true, createdByAdmin: true, lastLoginAt: true } },
         documents: true,
       },
     });
@@ -596,7 +597,7 @@ export class AdminService {
     const pro = await this.prisma.professional.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, name: true, phone: true, email: true, status: true, countryCode: true, createdAt: true } },
+        user: { select: { id: true, name: true, firstName: true, phone: true, email: true, status: true, countryCode: true, createdAt: true, createdByAdmin: true, lastLoginAt: true } },
         documents: true,
       },
     });
@@ -636,7 +637,7 @@ export class AdminService {
     const [professionals, total] = await Promise.all([
       this.prisma.professional.findMany({
         where,
-        include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+        include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
         orderBy: { createdAt: 'desc' },
         skip: pagination?.skip, take: pagination?.limit ?? 200,
       }),
@@ -670,6 +671,7 @@ export class AdminService {
         currency: 'XOF',
         status: 'ACTIVE' as any,
         pinHash,
+        createdByAdmin: true,
       },
     });
     const pro = await this.prisma.professional.create({
@@ -687,7 +689,7 @@ export class AdminService {
         description: dto.description,
         status: 'VALIDATED' as any,
       },
-      include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
     });
     return { data: pro };
   }
@@ -711,7 +713,7 @@ export class AdminService {
         ...(dto.commissionRate   !== undefined && { commissionRate:   Number(dto.commissionRate) }),
         ...(dto.deliveryRadiusKm !== undefined && { deliveryRadiusKm: Number(dto.deliveryRadiusKm) }),
       },
-      include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
     });
     return { data: pro };
   }
@@ -743,7 +745,7 @@ export class AdminService {
     const [drivers, total] = await Promise.all([
       this.prisma.driver.findMany({
         where,
-        include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+        include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
         orderBy: { createdAt: 'desc' },
         skip: pagination?.skip, take: pagination?.limit ?? 200,
       }),
@@ -774,6 +776,7 @@ export class AdminService {
         currency: 'XOF',
         status: 'ACTIVE' as any,
         pinHash,
+        createdByAdmin: true,
       },
     });
 
@@ -786,7 +789,7 @@ export class AdminService {
         licensePlate: licensePlate || null,
         status: 'PENDING',
       },
-      include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
     });
 
     return { data: driver };
@@ -817,7 +820,7 @@ export class AdminService {
         ...(zoneCountry !== undefined  ? { zoneCountry }  : {}),
         ...(licensePlate !== undefined ? { licensePlate } : {}),
       },
-      include: { user: { select: { name: true, firstName: true, phone: true, email: true } } },
+      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
     });
 
     return { data: updated };

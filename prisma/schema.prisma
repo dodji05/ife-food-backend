@@ -195,6 +195,7 @@ model User {
   twoFaEnabled     Boolean    @default(false)
   lastLoginAt      DateTime?
   lastLoginIp      String?
+  createdByAdmin   Boolean    @default(false)
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   deletedAt        DateTime?
