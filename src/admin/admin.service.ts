@@ -903,6 +903,190 @@ export class AdminService {
     return { success: true };
   }
 
+  // ─── PAYMENTS / CONFIG ───────────────────
+  async getCommissionConfig() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
+    const val = cfg?.value && typeof cfg.value === 'object' ? cfg.value : { type: 'PERCENTAGE', value: 15 };
+    return { data: val };
+  }
+
+  async getPlatformConfig() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
+    return { data: { paymentGateways: cfg?.value ?? { STRIPE: true, PAYPAL: true, KKIAPAY: true, FEDAPAY: true } } };
+  }
+
+  async getPaymentStats() {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [monthlyRev, monthlyComm, monthlyFees, pendingPayouts, totalTx, gatewayRaw] = await Promise.all([
+      this.prisma.order.aggregate({ where: { createdAt: { gte: startOfMonth }, paymentStatus: 'SUCCESS' as any }, _sum: { totalAmount: true } }),
+      this.prisma.order.aggregate({ where: { createdAt: { gte: startOfMonth }, paymentStatus: 'SUCCESS' as any }, _sum: { commissionAmount: true } }),
+      this.prisma.order.aggregate({ where: { createdAt: { gte: startOfMonth }, paymentStatus: 'SUCCESS' as any }, _sum: { deliveryFee: true } }),
+      this.prisma.transaction.count({ where: { type: 'PAYOUT' as any, status: 'PENDING' as any } }),
+      this.prisma.transaction.count(),
+      this.prisma.order.groupBy({
+        by: ['paymentMethod'],
+        _count: { id: true },
+        _sum: { totalAmount: true },
+        where: { paymentStatus: 'SUCCESS' as any },
+      }),
+    ]);
+
+    return {
+      data: {
+        monthlyRevenue:      monthlyRev._sum.totalAmount  ?? 0,
+        monthlyCommissions:  monthlyComm._sum.commissionAmount ?? 0,
+        monthlyDeliveryFees: monthlyFees._sum.deliveryFee ?? 0,
+        pendingPayouts,
+        totalTransactions: totalTx,
+        gatewayStats: gatewayRaw.map((g: any) => ({
+          gateway: g.paymentMethod,
+          count:   g._count.id,
+          total:   g._sum.totalAmount ?? 0,
+        })),
+      },
+    };
+  }
+
+  async getCommissionStats() {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    sixMonthsAgo.setDate(1);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
+
+    const [totals, recent, topRaw] = await Promise.all([
+      this.prisma.order.aggregate({ where: { paymentStatus: 'SUCCESS' as any }, _sum: { commissionAmount: true, totalAmount: true } }),
+      this.prisma.order.findMany({
+        where: { createdAt: { gte: sixMonthsAgo }, paymentStatus: 'SUCCESS' as any },
+        select: { createdAt: true, commissionAmount: true, totalAmount: true },
+      }),
+      this.prisma.order.groupBy({
+        by: ['professionalId'],
+        _sum: { commissionAmount: true, totalAmount: true },
+        _count: { id: true },
+        where: { paymentStatus: 'SUCCESS' as any },
+        orderBy: { _sum: { commissionAmount: 'desc' } },
+        take: 5,
+      }),
+    ]);
+
+    const monthlyMap = new Map<string, { revenue: number; commissions: number }>();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthlyMap.set(key, { revenue: 0, commissions: 0 });
+    }
+    for (const o of recent) {
+      const d = new Date(o.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyMap.has(key)) {
+        const e = monthlyMap.get(key)!;
+        e.revenue     += o.totalAmount;
+        e.commissions += o.commissionAmount;
+      }
+    }
+
+    const proIds = topRaw.map((p: any) => p.professionalId);
+    const pros = proIds.length > 0
+      ? await this.prisma.professional.findMany({ where: { id: { in: proIds } }, select: { id: true, businessName: true } })
+      : [];
+    const proMap = new Map(pros.map(p => [p.id, p]));
+
+    return {
+      data: {
+        totalCommissions: totals._sum.commissionAmount ?? 0,
+        totalRevenue:     totals._sum.totalAmount      ?? 0,
+        monthly: Array.from(monthlyMap.entries()).map(([month, v]) => ({ month, ...v })),
+        topCommissioners: topRaw.map((p: any) => ({
+          professional: proMap.get(p.professionalId),
+          commissions:  p._sum.commissionAmount ?? 0,
+          revenue:      p._sum.totalAmount      ?? 0,
+          orders:       p._count.id,
+        })),
+      },
+    };
+  }
+
+  async getDeliveryFeeStats() {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    sixMonthsAgo.setDate(1);
+
+    const [totals, byCity, recent] = await Promise.all([
+      this.prisma.order.aggregate({ where: { paymentStatus: 'SUCCESS' as any }, _sum: { deliveryFee: true }, _count: { id: true } }),
+      this.prisma.order.groupBy({
+        by: ['deliveryCity'],
+        _sum: { deliveryFee: true },
+        _count: { id: true },
+        where: { paymentStatus: 'SUCCESS' as any, deliveryCity: { not: null } },
+        orderBy: { _sum: { deliveryFee: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.order.findMany({
+        where: { createdAt: { gte: sixMonthsAgo }, paymentStatus: 'SUCCESS' as any },
+        select: { createdAt: true, deliveryFee: true },
+      }),
+    ]);
+
+    const monthlyMap = new Map<string, { fees: number; orders: number }>();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthlyMap.set(key, { fees: 0, orders: 0 });
+    }
+    for (const o of recent) {
+      const d = new Date(o.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyMap.has(key)) {
+        const e = monthlyMap.get(key)!;
+        e.fees   += o.deliveryFee;
+        e.orders += 1;
+      }
+    }
+
+    return {
+      data: {
+        totalFees:    totals._sum.deliveryFee ?? 0,
+        totalOrders:  totals._count.id,
+        avgFee:       totals._count.id > 0 ? Math.round((totals._sum.deliveryFee ?? 0) / totals._count.id) : 0,
+        topCities:    byCity.map((c: any) => ({ city: c.deliveryCity, fees: c._sum.deliveryFee ?? 0, orders: c._count.id })),
+        monthly:      Array.from(monthlyMap.entries()).map(([month, v]) => ({ month, ...v })),
+      },
+    };
+  }
+
+  async getTransactions(filters: any, pagination: PaginationDto) {
+    const where: any = {};
+    if (filters.type)   where.type   = filters.type;
+    if (filters.status) where.status = filters.status;
+    if (filters.from && filters.to) where.createdAt = { gte: new Date(filters.from), lte: new Date(filters.to) };
+
+    const [transactions, total] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where,
+        include: {
+          professional: { select: { businessName: true } },
+          driver: { include: { user: { select: { name: true, phone: true } } } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit ?? 100,
+      }),
+      this.prisma.transaction.count({ where }),
+    ]);
+    return { data: transactions, meta: { total, page: pagination.page, limit: pagination.limit } };
+  }
+
+  async updateTransactionStatus(id: string, status: string) {
+    const tx = await this.prisma.transaction.findUnique({ where: { id } });
+    if (!tx) throw new NotFoundException('Transaction introuvable.');
+    return this.prisma.transaction.update({ where: { id }, data: { status: status as any } });
+  }
+
   // ─── COMMISSION CONFIG ────────────────────
   async setCommissionConfig(type: 'PERCENTAGE' | 'FIXED_AMOUNT', value: number, perCategory?: Record<string, number>) {
     return this.prisma.platformConfig.upsert({

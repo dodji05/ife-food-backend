@@ -198,14 +198,44 @@ export class AdminController {
   }
 
   // CONFIG
+  @Get('config/commission')
+  getCommission() { return this.adminService.getCommissionConfig(); }
+
   @Put('config/commission')
   setCommission(@Body() body: { type: 'PERCENTAGE' | 'FIXED_AMOUNT'; value: number; perCategory?: any }) {
     return this.adminService.setCommissionConfig(body.type, body.value, body.perCategory);
   }
 
+  @Get('config/platform')
+  getPlatform() { return this.adminService.getPlatformConfig(); }
+
   @Put('config/payment-gateways')
   setGateways(@Body() body: Record<string, boolean>) {
     return this.adminService.setPaymentGateways(body);
+  }
+
+  // PAYMENTS
+  @Get('payments/stats')
+  getPaymentStats() { return this.adminService.getPaymentStats(); }
+
+  @Get('payments/commissions')
+  getCommissionStats() { return this.adminService.getCommissionStats(); }
+
+  @Get('payments/delivery-fee-stats')
+  getDeliveryFeeStats() { return this.adminService.getDeliveryFeeStats(); }
+
+  @Get('payments/transactions')
+  getTransactions(@Query() query: any) {
+    const { page, limit, ...filters } = query;
+    const pagination = new PaginationDto();
+    if (page)  pagination.page  = Number(page);
+    if (limit) pagination.limit = Number(limit);
+    return this.adminService.getTransactions(filters, pagination);
+  }
+
+  @Patch('transactions/:id/status')
+  updateTransactionStatus(@Param('id') id: string, @Body('status') status: string) {
+    return this.adminService.updateTransactionStatus(id, status);
   }
 
   // CATALOGUE ADMIN
