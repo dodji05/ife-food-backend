@@ -35,6 +35,9 @@ export class ReviewsService {
     const avg = reviews.length
       ? reviews.reduce((s, r) => s + (r.professionalRating ?? 0), 0) / reviews.length
       : 0;
-    return { data: { reviews, average: Math.round(avg * 10) / 10, count: reviews.length } };
+    // Alias `comment` pour le mobile (Prisma stocke `professionalComment`).
+    // L'admin utilise `professionalComment` directement → les deux coexistent.
+    const mapped = reviews.map(r => ({ ...r, comment: r.professionalComment }));
+    return { data: { reviews: mapped, average: Math.round(avg * 10) / 10, count: reviews.length } };
   }
 }

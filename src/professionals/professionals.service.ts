@@ -262,6 +262,13 @@ export class ProfessionalsService {
 
   // ── Promo codes (pro-side) ────────────────────────────────────────────────
 
+  // Ajoute les alias mobile (discountType/discountValue/minOrderAmount) sur un
+  // objet PromoCode issu de Prisma (qui stocke type/value/minOrder).
+  // L'admin utilise les noms Prisma → on conserve les deux dans la réponse.
+  private _promoWithAliases(c: any) {
+    return { ...c, discountType: c.type, discountValue: c.value, minOrderAmount: c.minOrder };
+  }
+
   async listPromoCodes(userId: string) {
     const prof = await this.prisma.professional.findUnique({ where: { userId } });
     if (!prof) throw new NotFoundException();
@@ -269,7 +276,7 @@ export class ProfessionalsService {
       where: { professionalId: prof.id },
       orderBy: { createdAt: 'desc' },
     });
-    return { data: codes };
+    return { data: codes.map(c => this._promoWithAliases(c)) };
   }
 
   async createPromoCode(userId: string, dto: any) {
@@ -279,21 +286,23 @@ export class ProfessionalsService {
     if (!code) throw new BadRequestException('Code requis');
     const existing = await this.prisma.promoCode.findUnique({ where: { code } });
     if (existing) throw new ConflictException('Ce code existe déjà');
+    // Accepte les deux conventions : admin envoie type/value/minOrder,
+    // mobile envoie discountType/discountValue/minOrderAmount.
     const created = await this.prisma.promoCode.create({
       data: {
         code,
-        type:           dto.type     ?? 'PERCENTAGE',
-        value:          Number(dto.value)    ?? 0,
-        minOrder:       Number(dto.minOrder) ?? 0,
+        type:           dto.discountType  ?? dto.type     ?? 'PERCENTAGE',
+        value:          Number(dto.discountValue  ?? dto.value)    || 0,
+        minOrder:       Number(dto.minOrderAmount ?? dto.minOrder) || 0,
         maxUses:        dto.maxUses ? Number(dto.maxUses) : null,
         perUser:        dto.perUser  ?? false,
         expiresAt:      dto.expiresAt ? new Date(dto.expiresAt) : null,
         countries:      dto.countries ?? ['BJ'],
-        isActive:       true,
+        isActive:       dto.isActive ?? true,
         professionalId: prof.id,
       },
     });
-    return { data: created };
+    return { data: this._promoWithAliases(created) };
   }
 
   async updatePromoCode(userId: string, promoId: string, dto: any) {
@@ -303,13 +312,16 @@ export class ProfessionalsService {
     if (!promo || promo.professionalId !== prof.id) throw new ForbiddenException();
     const patch: any = {};
     if (dto.isActive  !== undefined) patch.isActive  = dto.isActive;
-    if (dto.value     !== undefined) patch.value     = Number(dto.value);
-    if (dto.minOrder  !== undefined) patch.minOrder  = Number(dto.minOrder);
+    // Accepte les deux conventions de nommage (admin vs mobile).
+    const rawValue = dto.discountValue ?? dto.value;
+    const rawMin   = dto.minOrderAmount ?? dto.minOrder;
+    if (rawValue !== undefined) patch.value    = Number(rawValue);
+    if (rawMin   !== undefined) patch.minOrder = Number(rawMin);
     if (dto.maxUses   !== undefined) patch.maxUses   = dto.maxUses ? Number(dto.maxUses) : null;
     if (dto.expiresAt !== undefined) patch.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
     if (dto.perUser   !== undefined) patch.perUser   = dto.perUser;
     const updated = await this.prisma.promoCode.update({ where: { id: promoId }, data: patch });
-    return { data: updated };
+    return { data: this._promoWithAliases(updated) };
   }
 
   async deletePromoCode(userId: string, promoId: string) {
@@ -402,6 +414,9 @@ export class ProfessionalsService {
       product: productMap.get(t.productId) ?? null,
     }));
 
+    // Alias `comment` pour le mobile — même raison que getProfessionalReviews.
+    const recentReviewsMapped = recentReviews.map(r => ({ ...r, comment: r.professionalComment }));
+
     return {
       data: {
         revenue: {
@@ -414,14 +429,13 @@ export class ProfessionalsService {
           pending,
           total: totalOrders,
         },
-        // Note moyenne arrondie 1 décimale + nb d'avis (utile pour le badge).
         avgRating: ratingAgg._avg.professionalRating
             ? Number(ratingAgg._avg.professionalRating.toFixed(1))
             : 0,
         reviewCount: ratingAgg._count,
         revenueByDay,
         topProducts,
-        recentReviews,
+        recentReviews: recentReviewsMapped,
       },
     };
   }
