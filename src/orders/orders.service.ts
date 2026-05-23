@@ -305,7 +305,11 @@ export class OrdersService {
     const [orders, total] = await Promise.all([
       this.prisma.order.findMany({
         where: { clientId },
-        include: { professional: { select: { businessName: true, logoUrl: true } }, items: true },
+        include: {
+          professional: { select: { businessName: true, logoUrl: true } },
+          items: true,
+          review: { select: { id: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip: pagination.skip,
         take: pagination.limit,
@@ -355,6 +359,7 @@ export class OrdersService {
         driver: { select: { licensePlate: true, vehicleType: true, user: { select: { name: true, firstName: true, phone: true, avatarUrl: true } } } },
         delivery: true,
         payment: true,
+        review: true,
       },
     });
     if (!order) throw new NotFoundException('Order not found');
