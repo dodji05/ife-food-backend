@@ -53,8 +53,7 @@ const SHOP_IDS = [
   '3b4b0e0a-20d7-47da-b999-62257d384755',  // shop 1
 ] as const;
 
-// userId de l'owner des deux boutiques (clé de FK de notifications pro)
-const OWNER_USER_ID = '3e3a45a4-e4fd-48e1-8ef0-3fce1dd6788f';
+// Les owners sont récupérés dynamiquement depuis la DB (shop.userId).
 
 const SEED_TAG    = '[BULK-SEED]';
 const COMMISSION  = 0.10;          // 10 % de commission plateforme
@@ -299,7 +298,7 @@ async function createDeliveredOrder(
   await prisma.notification.createMany({ data: [
     // Pro : nouvelle commande
     {
-      userId: OWNER_USER_ID,
+      userId: shop.userId,
       type:   'ORDER_NEW',
       ...notifContent.ORDER_NEW(shop.businessName, totalAmount),
       data:      { orderId: order.id },
@@ -415,7 +414,7 @@ async function createDeliveredOrder(
 async function createCancelledOrder(
   conf:     OrderConf,
   clientId: string,
-  shop:     { id: string; businessName: string },
+  shop:     { id: string; businessName: string; userId: string },
   products: { id: string; price: number }[],
 ): Promise<void> {
   const selected = pick(products, conf.itemCount);
@@ -477,7 +476,7 @@ async function createCancelledOrder(
 
   await prisma.notification.createMany({ data: [
     {
-      userId:    OWNER_USER_ID,
+      userId:    shop.userId,
       type:      'ORDER_NEW',
       ...notifContent.ORDER_NEW(shop.businessName, totalAmount),
       data:      { orderId: order.id },
@@ -565,10 +564,9 @@ async function main() {
   // ─── 1. Vérifications d'existence ──────────────────────────────────────────
   console.log('1/5  Vérification des acteurs…');
 
-  const [clients, shops, owner] = await Promise.all([
+  const [clients, shops] = await Promise.all([
     prisma.user.findMany({ where: { id: { in: [...CLIENT_IDS] } }, select: { id: true, firstName: true, name: true, phone: true, role: true } }),
     prisma.professional.findMany({ where: { id: { in: [...SHOP_IDS] } }, select: { id: true, businessName: true, status: true, userId: true, commissionRate: true } }),
-    prisma.user.findUnique({ where: { id: OWNER_USER_ID }, select: { id: true, firstName: true, name: true } }),
   ]);
 
   if (clients.length !== CLIENT_IDS.length) {
@@ -581,14 +579,12 @@ async function main() {
     const missing = SHOP_IDS.filter(id => !found.includes(id));
     throw new Error(`Boutique(s) introuvable(s) : ${missing.join(', ')}`);
   }
-  if (!owner) throw new Error(`Owner introuvable : ${OWNER_USER_ID}`);
 
   for (const c of clients) {
     if (c.role !== 'CLIENT') throw new Error(`Utilisateur ${c.id} a le rôle ${c.role} (attendu CLIENT)`);
   }
   for (const s of shops) {
     if (s.status !== 'VALIDATED') throw new Error(`Boutique ${s.businessName} a le statut ${s.status} (attendu VALIDATED)`);
-    if (s.userId !== OWNER_USER_ID) throw new Error(`Boutique ${s.id} appartient à ${s.userId}, pas à ${OWNER_USER_ID}`);
   }
 
   clients.forEach(c => {
@@ -596,9 +592,8 @@ async function main() {
     console.log(`   ✓ Client  : ${label} (${c.id.slice(0, 8)}…)`);
   });
   shops.forEach(s =>
-    console.log(`   ✓ Boutique: ${s.businessName} (${s.id.slice(0, 8)}…)`)
+    console.log(`   ✓ Boutique: ${s.businessName} (owner ${s.userId.slice(0, 8)}…)`)
   );
-  console.log(`   ✓ Owner   : ${[owner.firstName, owner.name].filter(Boolean).join(' ') || OWNER_USER_ID}\n`);
 
   // ─── 2. Produits disponibles ────────────────────────────────────────────────
   console.log('2/5  Chargement des produits…');
