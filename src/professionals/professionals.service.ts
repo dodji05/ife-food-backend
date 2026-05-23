@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProfessionalDto, UpdateProfessionalDto, UpdateOpeningHoursDto } from './dto/professional.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -202,9 +202,62 @@ export class ProfessionalsService {
   async removeFavoriteDriver(userId: string, driverId: string) {
     const prof = await this.prisma.professional.findUnique({ where: { userId } });
     if (!prof) throw new NotFoundException();
+    // If driver was private for this pro, remove that link too.
+    await this.prisma.driver.updateMany({
+      where: { id: driverId, privateForProfessionalId: prof.id },
+      data:  { isPrivate: false, privateForProfessionalId: null },
+    });
     return this.prisma.professionalFavoriteDriver.delete({
       where: { professionalId_driverId: { professionalId: prof.id, driverId } },
     });
+  }
+
+  async markDriverPrivate(userId: string, driverId: string, isPrivate: boolean) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    // Must already be a favorite.
+    const fav = await this.prisma.professionalFavoriteDriver.findUnique({
+      where: { professionalId_driverId: { professionalId: prof.id, driverId } },
+    });
+    if (!fav) throw new BadRequestException('Driver is not in your favorites');
+    if (isPrivate) {
+      // Check driver is not already private for another pro.
+      const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+      if (driver?.isPrivate && driver.privateForProfessionalId !== prof.id) {
+        throw new ConflictException('Driver is already private for another professional');
+      }
+      return this.prisma.driver.update({
+        where: { id: driverId },
+        data:  { isPrivate: true, privateForProfessionalId: prof.id },
+        select: { id: true, isPrivate: true, privateForProfessionalId: true },
+      });
+    } else {
+      return this.prisma.driver.update({
+        where: { id: driverId },
+        data:  { isPrivate: false, privateForProfessionalId: null },
+        select: { id: true, isPrivate: true, privateForProfessionalId: true },
+      });
+    }
+  }
+
+  async searchDriverByPhone(userId: string, phone: string) {
+    if (!phone || phone.trim().length < 8) {
+      throw new BadRequestException('Phone number too short');
+    }
+    const user = await this.prisma.user.findFirst({
+      where: { phone: { contains: phone.trim() }, role: 'DRIVER' },
+      select: {
+        id: true, name: true, firstName: true, avatarUrl: true, phone: true,
+        driver: {
+          select: {
+            id: true, vehicleType: true, licensePlate: true,
+            status: true, isAvailable: true, isPrivate: true, privateForProfessionalId: true,
+          },
+        },
+      },
+    });
+    if (!user || !user.driver) throw new NotFoundException('Driver not found');
+    return { data: { ...user.driver, user: { name: user.name, firstName: user.firstName, avatarUrl: user.avatarUrl, phone: user.phone } } };
   }
 
   async getDashboard(userId: string) {

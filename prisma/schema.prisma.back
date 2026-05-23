@@ -8,7 +8,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  //url = env("DATABASE_URL")
 }
 
 // ─── ENUMS ───────────────────────────────────
@@ -30,19 +29,8 @@ enum UserStatus {
 enum AdminLevel {
   SUPER_ADMIN
   ADMIN
-  SUPPORT
   MODERATOR
   ANALYST
-}
-
-model Country {
-  code     String  @id
-  name     String
-  emoji    String?
-  currency String  @default("XOF")
-  isActive Boolean @default(true)
-
-  @@map("countries")
 }
 
 enum ProfessionalCategory {
@@ -107,7 +95,6 @@ enum PaymentGateway {
   PAYPAL
   KKIAPAY
   FEDAPAY
-  CASH_ON_DELIVERY
   OTHER
 }
 
@@ -127,17 +114,6 @@ enum TransactionType {
   REFUND
   DELIVERY_FEE
   TIP
-}
-
-enum WalletTxType {
-  REFERRAL_REWARD
-  ADMIN_CREDIT
-  ADMIN_DEBIT
-}
-
-enum ReferralStatus {
-  PENDING
-  REWARDED
 }
 
 enum TransactionStatus {
@@ -207,7 +183,6 @@ model User {
   twoFaEnabled     Boolean    @default(false)
   lastLoginAt      DateTime?
   lastLoginIp      String?
-  createdByAdmin   Boolean    @default(false)
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   deletedAt        DateTime?
@@ -222,37 +197,8 @@ model User {
   otpSessions      OtpSession[]
   loginLogs        LoginLog[]
   legalAcceptances LegalAcceptance[]
-  addresses        UserAddress[]
-  referralCode     String?           @unique
-  wallet           Wallet?
-  referrals        Referral[]        @relation("ReferrerReferrals")
-  referredAs       Referral?         @relation("RefereeReferral")
 
   @@map("users")
-}
-
-// Adresses sauvegardées d'un user (livraison côté CLIENT).
-// `isDefault` : une seule adresse par user peut être true à la fois — géré
-// côté service (transaction qui désactive les autres lors d'un set).
-model UserAddress {
-  id          String   @id @default(uuid())
-  userId      String
-  label       String   // ex: "Maison", "Bureau", "Chez Maman"
-  address     String   // ligne d'adresse complète
-  city        String
-  country     String   @default("BJ")
-  lat         Float?
-  lng         Float?
-  isDefault   Boolean  @default(false)
-  instructions String? // "Sonner 2x", "Code 1234", etc.
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([userId, isDefault])
-  @@map("user_addresses")
 }
 
 model OtpSession {
@@ -324,13 +270,11 @@ model Professional {
 
   user               User                @relation(fields: [userId], references: [id])
   products           Product[]
-  productCategories  ProductCategory[]
   orders             Order[]             @relation("ProfessionalOrders")
   documents          Document[]
   reviews            Review[]
   favoriteDrivers    ProfessionalFavoriteDriver[]
   transactions       Transaction[]
-  promoCodes         PromoCode[]
 
   @@map("professionals")
 }
@@ -360,9 +304,7 @@ model Driver {
   zoneCity         String?
   zoneCountry      String?
   zoneRadiusKm     Float        @default(10)
-  isAvailable              Boolean      @default(false)
-  isPrivate                Boolean      @default(false)
-  privateForProfessionalId String?
+  isAvailable      Boolean      @default(false)
   adminNote        String?
   validatedAt      DateTime?
   createdAt        DateTime     @default(now())
@@ -417,11 +359,7 @@ model ProductCategory {
   sortOrder      Int       @default(0)
   createdAt      DateTime  @default(now())
   products       Product[]
-  // Relation explicite vers Professional pour permettre include({professional:true})
-  // dans le service updateCategory/deleteCategory (ownership check).
-  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
 
-  @@index([professionalId])
   @@map("product_categories")
 }
 
@@ -470,14 +408,12 @@ model Order {
   paymentStatus       PaymentStatus  @default(PENDING)
   promoCode           String?
   promoDiscount       Float          @default(0)
-  specialInstructions  String?
-  scheduledDeliveryAt  DateTime?
+  specialInstructions String?
   estimatedDeliveryMin Int?
   cancelledBy         String?
   cancelledReason     String?
   rejectedReason      String?
   weatherMultiplier   Float          @default(1)
-  tipAmount           Float          @default(0)
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
@@ -605,20 +541,18 @@ model Message {
 // ─── PROMO CODES ──────────────────────────────
 
 model PromoCode {
-  id             String        @id @default(uuid())
-  code           String        @unique
-  type           String
-  value          Float
-  minOrder       Float         @default(0)
-  maxUses        Int?
-  usesCount      Int           @default(0)
-  perUser        Boolean       @default(false)
-  expiresAt      DateTime?
-  countries      String[]
-  isActive       Boolean       @default(true)
-  createdAt      DateTime      @default(now())
-  professionalId String?
-  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  id        String    @id @default(uuid())
+  code      String    @unique
+  type      String
+  value     Float
+  minOrder  Float     @default(0)
+  maxUses   Int?
+  usesCount Int       @default(0)
+  perUser   Boolean   @default(false)
+  expiresAt DateTime?
+  countries String[]
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
 
   @@map("promo_codes")
 }
@@ -640,7 +574,6 @@ model Transaction {
   userId         String?
   professionalId String?
   driverId       String?
-  orderId        String?
   type           TransactionType
   amount         Float
   currency       String
@@ -718,45 +651,4 @@ model ExchangeRate {
 
   @@unique([fromCurrency, toCurrency])
   @@map("exchange_rates")
-}
-
-// ─── WALLET & PARRAINAGE ──────────────────
-
-model Wallet {
-  id           String              @id @default(uuid())
-  userId       String              @unique
-  balance      Int                 @default(0)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  user         User                @relation(fields: [userId], references: [id])
-  transactions WalletTransaction[]
-
-  @@map("wallets")
-}
-
-model WalletTransaction {
-  id          String       @id @default(uuid())
-  walletId    String
-  amount      Int
-  type        WalletTxType
-  description String?
-  createdAt   DateTime     @default(now())
-  wallet      Wallet       @relation(fields: [walletId], references: [id])
-
-  @@index([walletId])
-  @@map("wallet_transactions")
-}
-
-model Referral {
-  id         String         @id @default(uuid())
-  referrerId String
-  refereeId  String         @unique
-  status     ReferralStatus @default(PENDING)
-  rewardedAt DateTime?
-  createdAt  DateTime       @default(now())
-  referrer   User           @relation("ReferrerReferrals", fields: [referrerId], references: [id])
-  referee    User           @relation("RefereeReferral", fields: [refereeId], references: [id])
-
-  @@index([referrerId])
-  @@map("referrals")
 }

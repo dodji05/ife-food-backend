@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -69,6 +69,24 @@ export class ProfessionalsController {
   @ApiBearerAuth('JWT')
   removeFavoriteDriver(@CurrentUser() user: any, @Param('driverId') driverId: string) {
     return this.professionalsService.removeFavoriteDriver(user.id, driverId);
+  }
+
+  @Patch('me/favorite-drivers/:driverId/mark-private')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Mark a favorite driver as private (exclusive to this pro)' })
+  markDriverPrivate(
+    @CurrentUser() user: any,
+    @Param('driverId') driverId: string,
+    @Body('isPrivate') isPrivate: boolean,
+  ) {
+    return this.professionalsService.markDriverPrivate(user.id, driverId, isPrivate);
+  }
+
+  @Get('me/drivers/search')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Search a driver by phone number to add to favorites' })
+  searchDriver(@CurrentUser() user: any, @Query('phone') phone: string) {
+    return this.professionalsService.searchDriverByPhone(user.id, phone);
   }
 
   @Get(':id')
