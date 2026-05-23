@@ -37,8 +37,10 @@ export class CreateProductDto {
   @ApiPropertyOptional() @IsOptional() @IsString() imageUrl?: string;
   // isAvailable manquait au create -> le mobile l'envoie en POST -> rejet.
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isAvailable?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isMenu?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsNumber() stock?: number;
   @ApiPropertyOptional() @IsOptional() @IsObject() variants?: any;
+  @ApiPropertyOptional() @IsOptional() @IsObject() options?: any;
 }
 
 export class UpdateProductDto {
@@ -49,6 +51,8 @@ export class UpdateProductDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() price?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() imageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isAvailable?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isMenu?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsNumber() stock?: number;
   @ApiPropertyOptional() @IsOptional() @IsObject() variants?: any;
+  @ApiPropertyOptional() @IsOptional() @IsObject() options?: any;
 }

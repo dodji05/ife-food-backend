@@ -89,6 +89,35 @@ export class ProfessionalsController {
     return this.professionalsService.searchDriverByPhone(user.id, phone);
   }
 
+  // ── Promo codes (pro-side) ───────────��──────────────────────────────────
+  @Get('me/promo-codes')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'List professional promo codes' })
+  listPromoCodes(@CurrentUser() user: any) {
+    return this.professionalsService.listPromoCodes(user.id);
+  }
+
+  @Post('me/promo-codes')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Create a promo code for this professional' })
+  createPromoCode(@CurrentUser() user: any, @Body() dto: any) {
+    return this.professionalsService.createPromoCode(user.id, dto);
+  }
+
+  @Patch('me/promo-codes/:promoId')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Update a professional promo code' })
+  updatePromoCode(@CurrentUser() user: any, @Param('promoId') promoId: string, @Body() dto: any) {
+    return this.professionalsService.updatePromoCode(user.id, promoId, dto);
+  }
+
+  @Delete('me/promo-codes/:promoId')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Delete a professional promo code' })
+  deletePromoCode(@CurrentUser() user: any, @Param('promoId') promoId: string) {
+    return this.professionalsService.deletePromoCode(user.id, promoId);
+  }
+
   @Get(':id')
   @Public()
   @ApiOperation({ summary: 'Get public professional profile with products' })

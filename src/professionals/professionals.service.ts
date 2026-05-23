@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProfessionalDto, UpdateProfessionalDto, UpdateOpeningHoursDto } from './dto/professional.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -258,6 +258,67 @@ export class ProfessionalsService {
     });
     if (!user || !user.driver) throw new NotFoundException('Driver not found');
     return { data: { ...user.driver, user: { name: user.name, firstName: user.firstName, avatarUrl: user.avatarUrl, phone: user.phone } } };
+  }
+
+  // ── Promo codes (pro-side) ────────────────────────────────────────────────
+
+  async listPromoCodes(userId: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const codes = await this.prisma.promoCode.findMany({
+      where: { professionalId: prof.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data: codes };
+  }
+
+  async createPromoCode(userId: string, dto: any) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const code = (dto.code as string)?.toUpperCase().trim();
+    if (!code) throw new BadRequestException('Code requis');
+    const existing = await this.prisma.promoCode.findUnique({ where: { code } });
+    if (existing) throw new ConflictException('Ce code existe déjà');
+    const created = await this.prisma.promoCode.create({
+      data: {
+        code,
+        type:           dto.type     ?? 'PERCENTAGE',
+        value:          Number(dto.value)    ?? 0,
+        minOrder:       Number(dto.minOrder) ?? 0,
+        maxUses:        dto.maxUses ? Number(dto.maxUses) : null,
+        perUser:        dto.perUser  ?? false,
+        expiresAt:      dto.expiresAt ? new Date(dto.expiresAt) : null,
+        countries:      dto.countries ?? ['BJ'],
+        isActive:       true,
+        professionalId: prof.id,
+      },
+    });
+    return { data: created };
+  }
+
+  async updatePromoCode(userId: string, promoId: string, dto: any) {
+    const prof  = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const promo = await this.prisma.promoCode.findUnique({ where: { id: promoId } });
+    if (!promo || promo.professionalId !== prof.id) throw new ForbiddenException();
+    const patch: any = {};
+    if (dto.isActive  !== undefined) patch.isActive  = dto.isActive;
+    if (dto.value     !== undefined) patch.value     = Number(dto.value);
+    if (dto.minOrder  !== undefined) patch.minOrder  = Number(dto.minOrder);
+    if (dto.maxUses   !== undefined) patch.maxUses   = dto.maxUses ? Number(dto.maxUses) : null;
+    if (dto.expiresAt !== undefined) patch.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    if (dto.perUser   !== undefined) patch.perUser   = dto.perUser;
+    const updated = await this.prisma.promoCode.update({ where: { id: promoId }, data: patch });
+    return { data: updated };
+  }
+
+  async deletePromoCode(userId: string, promoId: string) {
+    const prof  = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const promo = await this.prisma.promoCode.findUnique({ where: { id: promoId } });
+    if (!promo || promo.professionalId !== prof.id) throw new ForbiddenException();
+    await this.prisma.promoCode.delete({ where: { id: promoId } });
+    return { data: { deleted: true } };
   }
 
   async getDashboard(userId: string) {

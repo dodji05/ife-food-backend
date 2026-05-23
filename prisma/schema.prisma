@@ -435,8 +435,10 @@ model Product {
   currency       String           @default("XOF")
   imageUrl       String?
   isAvailable    Boolean          @default(true)
+  isMenu         Boolean          @default(false)
   stock          Int?
   variants       Json?
+  options        Json?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 

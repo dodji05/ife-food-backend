@@ -48,6 +48,12 @@ export class UsersController {
     return this.usersService.acceptLegal(user.id, dto.documentType, dto.version, ip);
   }
 
+  @Get('me/referral-code')
+  @ApiOperation({ summary: 'Get or generate own referral code' })
+  getReferralCode(@CurrentUser() user: any) {
+    return this.usersService.getOrCreateReferralCode(user.id);
+  }
+
   @Delete('me')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete account (soft delete)' })
