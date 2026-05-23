@@ -23,7 +23,8 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "seed:admin": "ts-node -r tsconfig-paths/register prisma/seed-admin.ts",
     "seed:demo-orders": "ts-node -r tsconfig-paths/register prisma/seed-demo-orders.ts",
-    "seed:orders-bulk": "ts-node -r tsconfig-paths/register prisma/seed-orders-bulk.ts"
+    "seed:orders-bulk": "ts-node -r tsconfig-paths/register prisma/seed-orders-bulk.ts",
+    "seed:active-orders": "ts-node -r tsconfig-paths/register prisma/seed-active-orders.ts"
   },
   "dependencies": {
     "@nestjs/bull": "^10.0.1",
