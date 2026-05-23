@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsNumber, IsOptional, IsIn, ValidateNested, Min } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsOptional, IsIn, IsDateString, ValidateNested, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -17,9 +17,11 @@ export class CreateOrderDto {
   @ApiPropertyOptional() @IsOptional() @IsString() deliveryCity?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() deliveryCountry?: string;
   @ApiProperty() @IsString() currency: string;
-  @ApiProperty() @IsIn(['STRIPE','PAYPAL','KKIAPAY','FEDAPAY','OTHER']) paymentMethod: string;
+  @ApiProperty() @IsIn(['STRIPE','PAYPAL','KKIAPAY','FEDAPAY','CASH_ON_DELIVERY','OTHER']) paymentMethod: string;
   @ApiPropertyOptional() @IsOptional() @IsString() promoCode?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() specialInstructions?: string;
+  @ApiPropertyOptional({ description: 'ISO 8601 — livraison planifiée (null = immédiate)' })
+  @IsOptional() @IsDateString() scheduledDeliveryAt?: string;
 }
 
 export class UpdateOrderStatusDto {

@@ -468,7 +468,8 @@ model Order {
   paymentStatus       PaymentStatus  @default(PENDING)
   promoCode           String?
   promoDiscount       Float          @default(0)
-  specialInstructions String?
+  specialInstructions  String?
+  scheduledDeliveryAt  DateTime?
   estimatedDeliveryMin Int?
   cancelledBy         String?
   cancelledReason     String?

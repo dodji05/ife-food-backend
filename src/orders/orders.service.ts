@@ -196,6 +196,7 @@ export class OrdersService {
         deliveryCountry: dto.deliveryCountry,
         paymentMethod: dto.paymentMethod as any,
         specialInstructions: dto.specialInstructions,
+        scheduledDeliveryAt: dto.scheduledDeliveryAt ? new Date(dto.scheduledDeliveryAt) : null,
         items: {
           create: orderItems.map((i) => ({
             productId: i.productId,
@@ -351,7 +352,7 @@ export class OrdersService {
         professional: { select: { businessName: true, address: true, phone: true, lat: true, lng: true } },
         // `phone` ajouté : le mobile PRO affiche un bouton "Appeler le livreur"
         // depuis le détail de commande, donc le tel est requis dans la réponse.
-        driver: { include: { user: { select: { name: true, firstName: true, phone: true, avatarUrl: true } } } },
+        driver: { select: { licensePlate: true, vehicleType: true, user: { select: { name: true, firstName: true, phone: true, avatarUrl: true } } } },
         delivery: true,
         payment: true,
       },
