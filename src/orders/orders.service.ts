@@ -578,8 +578,8 @@ export class OrdersService {
       }),
       this.prisma.delivery.upsert({
         where: { orderId },
-        create: { orderId, driverId: driver.id, status: 'ASSIGNED' as any, distanceKm, estimatedMinutes },
-        update: { driverId: driver.id, status: 'ASSIGNED' as any, distanceKm, estimatedMinutes },
+        create: { orderId, driverId: driver.id, status: 'ASSIGNED' as any, distanceKm },
+        update: { driverId: driver.id, status: 'ASSIGNED' as any, distanceKm },
       }),
     ]);
 
