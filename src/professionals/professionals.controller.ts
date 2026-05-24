@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -127,6 +128,26 @@ export class ProfessionalsController {
   @ApiOperation({ summary: 'Delete a professional promo code' })
   deletePromoCode(@CurrentUser() user: any, @Param('promoId') promoId: string) {
     return this.professionalsService.deletePromoCode(user.id, promoId);
+  }
+
+  // ── Documents ─────────────────────────────────────────────────────────────
+  @Get('me/documents')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'List professional documents' })
+  getDocuments(@CurrentUser() user: any) {
+    return this.professionalsService.getDocuments(user.id);
+  }
+
+  @Post('me/documents')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Upload a professional document' })
+  @UseInterceptors(FileInterceptor('file'))
+  uploadDocument(
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('docType') docType: string,
+  ) {
+    return this.professionalsService.uploadDocument(user.id, file, docType);
   }
 
   @Get(':id')

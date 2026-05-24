@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { UploadsService } from '../uploads/uploads.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProfessionalDto, UpdateProfessionalDto, UpdateOpeningHoursDto } from './dto/professional.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class ProfessionalsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private uploads: UploadsService) {}
 
   async register(userId: string, dto: CreateProfessionalDto) {
     const existing = await this.prisma.professional.findUnique({ where: { userId } });
@@ -537,5 +538,26 @@ export class ProfessionalsService {
         recentOrders,
       },
     };
+  }
+
+  // ── Documents ──────────────────────────────────────────────────────────────
+  async getDocuments(userId: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const docs = await this.prisma.document.findMany({
+      where: { professionalId: prof.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data: docs };
+  }
+
+  async uploadDocument(userId: string, file: Express.Multer.File, docType: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    // Remplace le document existant du même type (un seul par type)
+    await this.prisma.document.deleteMany({ where: { professionalId: prof.id, type: docType } });
+    const url = await this.uploads.uploadFile(file, 'ife-food/documents/professional');
+    const doc = await this.prisma.document.create({ data: { professionalId: prof.id, type: docType, url } });
+    return { data: doc };
   }
 }
