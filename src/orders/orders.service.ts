@@ -11,6 +11,21 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
 
+  // ── Dispatch state ────────────────────────────────────────────────────────
+  // Mémorise l'état de dispatch en cours par orderId :
+  //   - timeoutHandle : le setTimeout à annuler si le driver accepte
+  //   - triedUserIds  : drivers déjà contactés (exclus des retries)
+  //   - retryCount    : nombre de tentatives effectuées
+  //
+  // JS single-threaded → pas de race condition sur la Map.
+  // Pour un déploiement multi-instance, remplacer par Redis + BullMQ.
+  private readonly pendingDispatches = new Map<string, {
+    timeoutHandle: ReturnType<typeof setTimeout>;
+    triedUserIds:  Set<string>;
+    retryCount:    number;
+  }>();
+  private readonly MAX_DISPATCH_RETRIES = 3;
+
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
@@ -19,21 +34,17 @@ export class OrdersService {
     private deliveriesGateway: DeliveriesGateway,
   ) {}
 
-  /**
-   * Broadcast `new_mission` aux drivers ÉLIGIBLES.
-   *
-   * Sprint B - filtrage éligibilité côté backend (best-effort) :
-   *   - status='VALIDATED' (driver actif validé par admin)
-   *   - isAvailable=true (driver en mode ONLINE)
-   *   - quota maxConcurrentDeliveries non atteint
-   *   - zone : si driver.zoneCity match l'adresse delivery, on priorise.
-   *     Fallback : tous les drivers éligibles si aucun match géo.
-   *
-   * On émet ensuite individuellement sur la room driver_<userId> pour
-   * chaque driver éligible (vs broadcast aveugle sur drivers_online).
-   * Coût raisonnable car early stage : <50 drivers concurrents.
-   */
-  private async dispatchNewMission(orderId: string) {
+  private async dispatchNewMission(
+    orderId: string,
+    triedUserIds = new Set<string>(),
+    retryCount = 0,
+  ) {
+    if (retryCount > this.MAX_DISPATCH_RETRIES) {
+      this.logger.warn(`[dispatch] Max retries (${this.MAX_DISPATCH_RETRIES}) atteint pour order ${orderId}`);
+      this.pendingDispatches.delete(orderId);
+      return;
+    }
+
     try {
       const order = await this.prisma.order.findUnique({
         where: { id: orderId },
@@ -42,9 +53,11 @@ export class OrdersService {
           items: { include: { product: true } },
         },
       });
-      if (!order) return;
+      if (!order || order.driverId) {
+        this.pendingDispatches.delete(orderId);
+        return;
+      }
 
-      // Haversine réutilisable localement (en km).
       const toRad = (d: number) => (d * Math.PI) / 180;
       const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
         const dLat = toRad(lat2 - lat1);
@@ -60,16 +73,15 @@ export class OrdersService {
       const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
       const deliveryZone = (order as any).deliveryCity ?? order.professional.city ?? '';
 
-      // Capacités par type de véhicule — configurables via PlatformConfig
-      // key='vehicle_capacity'. Défauts : vélo=2, moto=5, voiture=10, pied=1.
-      const capConfig = await this.prisma.platformConfig.findUnique({ where: { key: 'vehicle_capacity' } });
+      const [capConfig, timeoutConfig] = await Promise.all([
+        this.prisma.platformConfig.findUnique({ where: { key: 'vehicle_capacity' } }),
+        this.prisma.platformConfig.findUnique({ where: { key: 'mission_accept_timeout' } }),
+      ]);
       const vehicleCapacities: Record<string, number> = {
-        BICYCLE:    2,
-        MOTORCYCLE: 5,
-        CAR:        10,
-        ON_FOOT:    1,
+        BICYCLE: 2, MOTORCYCLE: 5, CAR: 10, ON_FOOT: 1,
         ...(capConfig?.value as any ?? {}),
       };
+      const timeoutSeconds: number = (timeoutConfig?.value as any)?.seconds ?? 30;
 
       const basePayload = {
         orderId:             order.id,
@@ -89,74 +101,96 @@ export class OrdersService {
         items:               order.items,
       };
 
-      // Drivers éligibles : validated + available + quota non atteint.
+      // Drivers éligibles non encore contactés pour cette commande.
       const eligibleDrivers = await this.prisma.driver.findMany({
-        where: { status: 'VALIDATED' as any, isAvailable: true },
+        where: {
+          status:      'VALIDATED' as any,
+          isAvailable: true,
+          ...(triedUserIds.size > 0 && { userId: { notIn: Array.from(triedUserIds) } }),
+        },
         select: {
           id: true, userId: true, vehicleType: true,
           zoneCity: true, currentLat: true, currentLng: true,
-          _count: {
-            select: {
-              deliveries: {
-                where: { status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any } },
-              },
-            },
-          },
+          _count: { select: { deliveries: { where: { status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any } } } } },
         },
       });
 
       const proCity = order.professional.city;
       const available = eligibleDrivers.filter((d) => {
-        // 1. Quota véhicule
-        const maxCap = vehicleCapacities[d.vehicleType as string] ?? 3;
-        if (d._count.deliveries >= maxCap) return false;
-
-        // 2. Zone : le driver doit couvrir la ville du restaurant (si sa zone est définie)
+        if (d._count.deliveries >= (vehicleCapacities[d.vehicleType as string] ?? 3)) return false;
         if (d.zoneCity && proCity && d.zoneCity !== proCity) return false;
-
-        // 3. Proximité : si le driver a une position GPS, il doit être à <20 km du restaurant
-        if (d.currentLat != null && d.currentLng != null) {
-          const distToPickup = haversine(d.currentLat, d.currentLng, order.professional.lat, order.professional.lng);
-          if (distToPickup > 20) return false;
-        }
-
+        if (d.currentLat != null && d.currentLng != null &&
+            haversine(d.currentLat, d.currentLng, order.professional.lat, order.professional.lng) > 20) return false;
         return true;
       });
 
       if (available.length === 0) {
-        this.logger.warn(`[dispatch] Aucun driver éligible pour order ${order.id}`);
+        this.logger.warn(`[dispatch] retry=${retryCount} aucun driver disponible pour order ${orderId}`);
+        this.pendingDispatches.delete(orderId);
         return;
       }
 
-      this.logger.log(`[dispatch] order ${order.id} -> ${available.length} driver(s) eligible(s)`);
+      this.logger.log(`[dispatch] retry=${retryCount} order ${orderId} -> ${available.length} driver(s)`);
 
+      const newTriedUserIds = new Set(triedUserIds);
       for (const d of available) {
-        // Distance personnalisée driver → restaurant pour le payload socket et la notif push.
         const distanceToPickupKm = (d.currentLat != null && d.currentLng != null)
           ? haversine(d.currentLat, d.currentLng, order.professional.lat, order.professional.lng)
           : null;
 
-        this.deliveriesGateway.emitNewMission({
-          ...basePayload,
-          distanceToPickupKm,
-          driverUserId: d.userId,
-        });
-
-        // Push FCM avec tous les détails de la mission (best-effort).
+        this.deliveriesGateway.emitNewMission({ ...basePayload, distanceToPickupKm, driverUserId: d.userId });
         this.notifications.sendDriverMissionPush(d.userId, {
-          orderId:           order.id,
-          professionalName:  order.professional.businessName,
-          professionalAddress: order.professional.address,
-          deliveryZone,
-          distanceToPickupKm,
-          distanceKm,
-          deliveryFee:       order.deliveryFee,
-          currency:          order.currency,
+          orderId: order.id, professionalName: order.professional.businessName,
+          professionalAddress: order.professional.address, deliveryZone,
+          distanceToPickupKm, distanceKm, deliveryFee: order.deliveryFee, currency: order.currency,
         }).catch(() => {});
+        newTriedUserIds.add(d.userId);
       }
+
+      // Annule l'éventuel timeout précédent.
+      const existing = this.pendingDispatches.get(orderId);
+      if (existing) clearTimeout(existing.timeoutHandle);
+
+      // Timeout configuré via PlatformConfig key='mission_accept_timeout' (défaut 30s).
+      // Quand il expire : si la commande est toujours non assignée, on réessaie
+      // avec les drivers pas encore contactés (max MAX_DISPATCH_RETRIES fois).
+      const timeoutHandle = setTimeout(async () => {
+        const latest = await this.prisma.order.findUnique({
+          where: { id: orderId }, select: { driverId: true },
+        });
+        if (latest?.driverId) { this.pendingDispatches.delete(orderId); return; }
+        this.logger.log(`[dispatch] Expiration order ${orderId} — retry ${retryCount + 1}`);
+        this.pendingDispatches.delete(orderId);
+        this.dispatchNewMission(orderId, newTriedUserIds, retryCount + 1);
+      }, timeoutSeconds * 1000);
+
+      this.pendingDispatches.set(orderId, { timeoutHandle, triedUserIds: newTriedUserIds, retryCount });
     } catch (e) {
       this.logger.error(`[dispatch] Erreur: ${e}`);
     }
+  }
+
+  /** Refus explicite d'un driver → réattribution immédiate aux drivers restants. */
+  async handleDriverDecline(orderId: string, driverUserId: string) {
+    const state = this.pendingDispatches.get(orderId);
+    if (state) {
+      clearTimeout(state.timeoutHandle);
+      state.triedUserIds.add(driverUserId);
+      this.pendingDispatches.delete(orderId);
+    }
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId }, select: { driverId: true },
+    });
+    if (order && !order.driverId) {
+      const tried = state ? state.triedUserIds : new Set([driverUserId]);
+      this.dispatchNewMission(orderId, tried, state?.retryCount ?? 0);
+    }
+  }
+
+  /** Annule le timeout de dispatch après acceptation d'une mission. */
+  clearPendingDispatch(orderId: string) {
+    const state = this.pendingDispatches.get(orderId);
+    if (state) { clearTimeout(state.timeoutHandle); this.pendingDispatches.delete(orderId); }
   }
 
   async createOrder(clientId: string, dto: CreateOrderDto) {

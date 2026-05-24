@@ -287,6 +287,20 @@ export class DriversService {
     return { data: deliveries };
   }
 
+  /** Config driver-facing (timeout mission + fournisseur navigation). */
+  async getDriverConfig() {
+    const [timeoutCfg, navCfg] = await Promise.all([
+      this.prisma.platformConfig.findUnique({ where: { key: 'mission_accept_timeout' } }),
+      this.prisma.platformConfig.findUnique({ where: { key: 'navigation_provider' } }),
+    ]);
+    return {
+      data: {
+        missionTimeoutSeconds: (timeoutCfg?.value as any)?.seconds    ?? 30,
+        navigationProvider:    (navCfg?.value   as any)?.provider     ?? 'GOOGLE_MAPS',
+      },
+    };
+  }
+
   async getEarnings(userId: string) {
     const driver = await this.prisma.driver.findUnique({ where: { userId } });
     if (!driver) throw new NotFoundException();

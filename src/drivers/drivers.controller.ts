@@ -4,6 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { DriversService } from './drivers.service';
+import { OrdersService } from '../orders/orders.service';
 import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto } from './dto/driver.dto';
 
 @ApiTags('drivers')
@@ -11,7 +12,10 @@ import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto } from './dto/drive
 @UseGuards(JwtAuthGuard)
 @Controller('drivers')
 export class DriversController {
-  constructor(private driversService: DriversService) {}
+  constructor(
+    private driversService: DriversService,
+    private ordersService: OrdersService,
+  ) {}
 
   @Post('register')
   register(@CurrentUser() user: any, @Body() dto: CreateDriverDto) {
@@ -29,15 +33,21 @@ export class DriversController {
   }
 
   @Get('me/active-missions')
-  @ApiOperation({ summary: 'List ongoing deliveries (PICKED_UP / IN_DELIVERY)' })
+  @ApiOperation({ summary: 'List ongoing deliveries' })
   getActiveMissions(@CurrentUser() user: any) {
     return this.driversService.getActiveMissions(user.id);
   }
 
   @Get('me/earnings')
-  @ApiOperation({ summary: 'List driver earnings (paginated)' })
+  @ApiOperation({ summary: 'List driver earnings' })
   getEarnings(@CurrentUser() user: any) {
     return this.driversService.getEarnings(user.id);
+  }
+
+  @Get('config')
+  @ApiOperation({ summary: 'Driver-facing config (timeout, nav provider)' })
+  getConfig() {
+    return this.driversService.getDriverConfig();
   }
 
   @Patch('me')
@@ -60,13 +70,28 @@ export class DriversController {
 
   @Post('missions/:orderId/accept')
   @ApiOperation({ summary: 'Accept a delivery mission' })
-  acceptMission(@CurrentUser() user: any, @Param('orderId') orderId: string) {
-    return this.driversService.acceptMission(user.id, orderId);
+  async acceptMission(@CurrentUser() user: any, @Param('orderId') orderId: string) {
+    const result = await this.driversService.acceptMission(user.id, orderId);
+    // Annule le timeout de réattribution — la commande est prise.
+    this.ordersService.clearPendingDispatch(orderId);
+    return result;
+  }
+
+  @Post('missions/:orderId/decline')
+  @ApiOperation({ summary: 'Decline a delivery mission — triggers reassignment' })
+  async declineMission(@CurrentUser() user: any, @Param('orderId') orderId: string) {
+    await this.ordersService.handleDriverDecline(orderId, user.id);
+    return { success: true };
   }
 
   @Patch('missions/:orderId/status')
   @ApiOperation({ summary: 'Update delivery status' })
-  updateDeliveryStatus(@CurrentUser() user: any, @Param('orderId') orderId: string, @Body('status') status: string, @Body('confirmPhoto') photo?: string) {
+  updateDeliveryStatus(
+    @CurrentUser() user: any,
+    @Param('orderId') orderId: string,
+    @Body('status') status: string,
+    @Body('confirmPhoto') photo?: string,
+  ) {
     return this.driversService.updateDeliveryStatus(user.id, orderId, status, photo);
   }
 }
