@@ -1,6 +1,7 @@
 import { IsString, IsArray, IsNumber, IsOptional, IsIn, IsDateString, ValidateNested, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 export class OrderItemDto {
   @ApiProperty() @IsString() productId: string;
@@ -26,7 +27,7 @@ export class CreateOrderDto {
 
 const ORDER_STATUSES = ['PENDING_PAYMENT','PAID','ACCEPTED','REJECTED','IN_PREPARATION','READY_FOR_PICKUP','DRIVER_ASSIGNED','PICKED_UP','IN_DELIVERY','DELIVERED','CANCELLED','REFUNDED'] as const;
 
-export class ProfessionalOrdersQueryDto {
+export class ProfessionalOrdersQueryDto extends PaginationDto {
   @ApiPropertyOptional({ enum: ORDER_STATUSES })
   @IsOptional()
   @IsIn(ORDER_STATUSES)

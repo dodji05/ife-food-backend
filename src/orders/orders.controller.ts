@@ -4,7 +4,6 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto, UpdateOrderStatusDto, ProfessionalOrdersQueryDto } from './dto/order.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('orders')
 @ApiBearerAuth('JWT')
@@ -29,10 +28,9 @@ export class OrdersController {
   @ApiOperation({ summary: 'Get professional orders' })
   getProfessionalOrders(
     @CurrentUser() user: any,
-    @Query() pagination: PaginationDto,
     @Query() query: ProfessionalOrdersQueryDto,
   ) {
-    return this.ordersService.getProfessionalOrders(user.professional?.id, pagination, query.status);
+    return this.ordersService.getProfessionalOrders(user.professional?.id, query, query.status);
   }
 
   @Get(':id')
