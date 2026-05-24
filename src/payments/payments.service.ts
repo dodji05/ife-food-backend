@@ -212,6 +212,6 @@ export class PaymentsService {
 
   async getActiveGateways() {
     const config = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
-    return { data: config?.value ?? { STRIPE: true, PAYPAL: true, KKIAPAY: true, FEDAPAY: true } };
+    return { data: config?.value ?? { KKIAPAY: true, CASH_ON_DELIVERY: true } };
   }
 }
