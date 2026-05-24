@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GeoService } from '../geo/geo.service';
 import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
-import { CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
+import { CreateOrderDto, UpdateOrderStatusDto, ACTIVE_ORDER_STATUSES } from './dto/order.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -412,7 +412,11 @@ export class OrdersService {
 
   async getProfessionalOrders(professionalId: string, pagination: PaginationDto, status?: string) {
     const where: any = { professionalId };
-    if (status) where.status = status;
+    if (status === 'active') {
+      where.status = { in: [...ACTIVE_ORDER_STATUSES] };
+    } else if (status) {
+      where.status = status;
+    }
     const [orders, total] = await Promise.all([
       this.prisma.order.findMany({
         where,

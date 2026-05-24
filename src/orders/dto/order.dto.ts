@@ -27,10 +27,15 @@ export class CreateOrderDto {
 
 const ORDER_STATUSES = ['PENDING_PAYMENT','PAID','ACCEPTED','REJECTED','IN_PREPARATION','READY_FOR_PICKUP','DRIVER_ASSIGNED','PICKED_UP','IN_DELIVERY','DELIVERED','CANCELLED','REFUNDED'] as const;
 
+// Statuts virtuels acceptés par le filtre pro (côté mobile, 'active' = En cours)
+const PRO_FILTER_STATUSES = [...ORDER_STATUSES, 'active'] as const;
+
+export const ACTIVE_ORDER_STATUSES = ['ACCEPTED','IN_PREPARATION','READY_FOR_PICKUP','DRIVER_ASSIGNED','IN_DELIVERY'] as const;
+
 export class ProfessionalOrdersQueryDto extends PaginationDto {
-  @ApiPropertyOptional({ enum: ORDER_STATUSES })
+  @ApiPropertyOptional({ enum: PRO_FILTER_STATUSES })
   @IsOptional()
-  @IsIn(ORDER_STATUSES)
+  @IsIn(PRO_FILTER_STATUSES)
   status?: string;
 }
 
