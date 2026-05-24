@@ -551,6 +551,21 @@ export class ProfessionalsService {
     return { data: docs };
   }
 
+  async getReviews(userId: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const reviews = await this.prisma.review.findMany({
+      where: { professionalId: prof.id, isModerated: false },
+      include: { reviewer: { select: { name: true, firstName: true, avatarUrl: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const avg = reviews.length
+      ? reviews.reduce((s, r) => s + (r.professionalRating ?? 0), 0) / reviews.length
+      : 0;
+    const mapped = reviews.map(r => ({ ...r, comment: r.professionalComment }));
+    return { data: { reviews: mapped, average: Math.round(avg * 10) / 10, count: reviews.length } };
+  }
+
   async uploadDocument(userId: string, file: Express.Multer.File, docType: string) {
     const prof = await this.prisma.professional.findUnique({ where: { userId } });
     if (!prof) throw new NotFoundException();

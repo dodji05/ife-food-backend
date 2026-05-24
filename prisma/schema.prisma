@@ -404,6 +404,8 @@ model Document {
   professional   Professional? @relation(fields: [professionalId], references: [id])
   driver         Driver?       @relation(fields: [driverId], references: [id])
 
+  @@index([professionalId])
+  @@index([driverId])
   @@map("documents")
 }
 
@@ -446,6 +448,8 @@ model Product {
   category       ProductCategory? @relation(fields: [categoryId], references: [id])
   orderItems     OrderItem[]
 
+  @@index([professionalId])
+  @@index([categoryId])
   @@map("products")
 }
 
@@ -491,6 +495,11 @@ model Order {
   delivery            Delivery?
   review              Review?
 
+  @@index([clientId])
+  @@index([professionalId])
+  @@index([driverId])
+  @@index([status, createdAt])
+  @@index([createdAt])
   @@map("orders")
 }
 
@@ -506,6 +515,8 @@ model OrderItem {
   order      Order    @relation(fields: [orderId], references: [id])
   product    Product  @relation(fields: [productId], references: [id])
 
+  @@index([orderId])
+  @@index([productId])
   @@map("order_items")
 }
 
@@ -547,6 +558,7 @@ model Delivery {
   order         Order          @relation(fields: [orderId], references: [id])
   driver        Driver         @relation(fields: [driverId], references: [id])
 
+  @@index([driverId])
   @@map("deliveries")
 }
 
@@ -570,6 +582,8 @@ model Review {
   driver              Driver?       @relation(fields: [driverId], references: [id])
   order               Order         @relation(fields: [orderId], references: [id])
 
+  @@index([professionalId])
+  @@index([driverId])
   @@map("reviews")
 }
 
@@ -587,6 +601,8 @@ model Notification {
   createdAt DateTime            @default(now())
   user      User                @relation(fields: [userId], references: [id])
 
+  @@index([userId])
+  @@index([userId, read])
   @@map("notifications")
 }
 
@@ -601,6 +617,8 @@ model Message {
   createdAt      DateTime @default(now())
   sender         User     @relation(fields: [senderId], references: [id])
 
+  @@index([conversationId])
+  @@index([senderId])
   @@map("messages")
 }
 
@@ -622,6 +640,7 @@ model PromoCode {
   professionalId String?
   professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: SetNull)
 
+  @@index([professionalId])
   @@map("promo_codes")
 }
 
@@ -632,6 +651,8 @@ model PromoCodeUsage {
   orderId     String
   usedAt      DateTime @default(now())
 
+  @@index([promoCodeId])
+  @@index([userId])
   @@map("promo_code_usages")
 }
 
@@ -653,6 +674,10 @@ model Transaction {
   professional   Professional?     @relation(fields: [professionalId], references: [id])
   driver         Driver?           @relation(fields: [driverId], references: [id])
 
+  @@index([professionalId])
+  @@index([driverId])
+  @@index([orderId])
+  @@index([userId])
   @@map("transactions")
 }
 

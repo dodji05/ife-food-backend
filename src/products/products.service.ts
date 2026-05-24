@@ -164,6 +164,18 @@ export class ProductsService {
     return { imageUrl };
   }
 
+  async getCategoriesMine(userId: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException('Professional profile not found');
+    return this.getCategories(prof.id);
+  }
+
+  async getProductsMine(userId: string, pagination: PaginationDto) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException('Professional profile not found');
+    return this.getProducts(prof.id, pagination);
+  }
+
   async getProducts(professionalId: string, pagination: PaginationDto) {
     const [products, total] = await Promise.all([
       this.prisma.product.findMany({ where: { professionalId }, include: { category: true }, skip: pagination.skip, take: pagination.limit }),

@@ -20,6 +20,13 @@ export class ProductsController {
     return this.productsService.createCategory(user.id, dto);
   }
 
+  @Get('categories/mine')
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Get my categories (professional shortcut)' })
+  getMineCategories(@CurrentUser() user: any) {
+    return this.productsService.getCategoriesMine(user.id);
+  }
+
   @Get('categories/:professionalId')
   @Public()
   getCategories(@Param('professionalId') professionalId: string) {
@@ -102,6 +109,13 @@ export class ProductsController {
       lat !== undefined ? parseFloat(lat) : undefined,
       lng !== undefined ? parseFloat(lng) : undefined,
     );
+  }
+
+  @Get('mine')
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Get my products (professional shortcut)' })
+  getMineProducts(@CurrentUser() user: any, @Query() pagination: PaginationDto) {
+    return this.productsService.getProductsMine(user.id, pagination);
   }
 
   @Get('professional/:id')

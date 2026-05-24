@@ -252,10 +252,18 @@ export class OrdersService {
       ]);
       // Notif PAID au pro (best-effort, ne bloque pas la création d'order).
       this.notifications.sendOrderNotification(order.id, 'PAID').catch(() => {});
-      // Sprint C - emit PAID sur la room order_<id>. Le tracking_screen
-      // client commence à écouter dès qu'il s'ouvre, donc cet event lui
-      // permet de voir le statut bouger en mode test.
+      // Emit PAID sur la room order_<id> (tracking client).
       this.deliveriesGateway.emitOrderStatus(order.id, 'PAID');
+      // Notif temps réel socket → pro (room professional_<userId>).
+      // Le pro reçoit `new_order` sans avoir à tracker l'orderId.
+      this.deliveriesGateway.emitNewOrder((order.professional as any).userId, {
+        orderId:         order.id,
+        totalAmount:     (order as any).totalAmount ?? 0,
+        itemCount:       order.items?.length ?? 0,
+        clientName:      (order.client as any)?.name ?? (order.client as any)?.firstName ?? undefined,
+        deliveryAddress: (order as any).deliveryAddress ?? '',
+        createdAt:       Date.now(),
+      });
 
       // Sprint B - le dispatch driver est maintenant déclenché à
       // READY_FOR_PICKUP (cf updateOrderStatus), plus à PAID. Ça respecte
@@ -319,15 +327,12 @@ export class OrdersService {
     return { data: orders, meta: { total, page: pagination.page, limit: pagination.limit } };
   }
 
-  async getProfessionalOrders(professionalId: string, pagination: PaginationDto) {
-    // Relations enrichies pour la vue PRO :
-    //   - client : nom + tel + avatar (bouton appel + avatar carte)
-    //   - driver.user : nom + tel + avatar (bandeau livreur assigné)
-    //   - items.product : nom multilingue + imageUrl (thumbnail item)
-    //   - payment : statut paiement (badge optionnel)
+  async getProfessionalOrders(professionalId: string, pagination: PaginationDto, status?: string) {
+    const where: any = { professionalId };
+    if (status) where.status = status;
     const [orders, total] = await Promise.all([
       this.prisma.order.findMany({
-        where: { professionalId },
+        where,
         include: {
           client: { select: { name: true, firstName: true, phone: true, avatarUrl: true } },
           driver: {
@@ -342,7 +347,7 @@ export class OrdersService {
         skip: pagination.skip,
         take: pagination.limit,
       }),
-      this.prisma.order.count({ where: { professionalId } }),
+      this.prisma.order.count({ where }),
     ]);
     return { data: orders, meta: { total, page: pagination.page, limit: pagination.limit } };
   }
@@ -529,5 +534,74 @@ export class OrdersService {
     ]);
 
     return updatedOrder;
+  }
+
+  /**
+   * Assignation manuelle d'un livreur favori par le professionnel.
+   * Déclenché après READY_FOR_PICKUP quand le pro choisit explicitement
+   * un de ses livreurs favoris disponibles.
+   */
+  async assignDriver(orderId: string, driverUserId: string, proUserId: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId: proUserId } });
+    if (!prof) throw new ForbiddenException();
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { professional: { select: { businessName: true, address: true, lat: true, lng: true } } },
+    });
+    if (!order || order.professionalId !== prof.id) throw new ForbiddenException();
+    if (order.status !== 'READY_FOR_PICKUP') {
+      throw new BadRequestException('Assignation possible uniquement en statut READY_FOR_PICKUP');
+    }
+
+    const driver = await this.prisma.driver.findFirst({
+      where: { userId: driverUserId, status: 'VALIDATED' as any, isAvailable: true },
+    });
+    if (!driver) throw new NotFoundException('Livreur non disponible');
+
+    // Calcul distance + temps estimé (réutilise la même formule que dispatch).
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(order.deliveryLat - (order.professional as any).lat);
+    const dLng = toRad(order.deliveryLng - (order.professional as any).lng);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad((order.professional as any).lat)) *
+        Math.cos(toRad(order.deliveryLat)) *
+        Math.sin(dLng / 2) ** 2;
+    const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
+
+    await this.prisma.$transaction([
+      this.prisma.order.update({
+        where: { id: orderId },
+        data: { driverId: driver.id, status: 'DRIVER_ASSIGNED' as any },
+      }),
+      this.prisma.delivery.upsert({
+        where: { orderId },
+        create: { orderId, driverId: driver.id, status: 'ASSIGNED' as any, distanceKm, estimatedMinutes },
+        update: { driverId: driver.id, status: 'ASSIGNED' as any, distanceKm, estimatedMinutes },
+      }),
+    ]);
+
+    // Notifie le livreur (socket + FCM).
+    this.deliveriesGateway.emitNewMission({
+      orderId: order.id,
+      professionalName: (order.professional as any).businessName,
+      professionalAddress: (order.professional as any).address,
+      professionalLat: (order.professional as any).lat,
+      professionalLng: (order.professional as any).lng,
+      deliveryAddress: order.deliveryAddress,
+      deliveryLat: order.deliveryLat,
+      deliveryLng: order.deliveryLng,
+      deliveryFee: order.deliveryFee,
+      currency: order.currency,
+      distanceKm,
+      estimatedMinutes,
+      driverUserId,
+    });
+    this.deliveriesGateway.emitOrderStatus(orderId, 'DRIVER_ASSIGNED', { driverId: driver.id });
+    this.notifications.sendOrderNotification(orderId, 'DRIVER_ASSIGNED').catch(() => {});
+
+    return { data: { success: true, driverId: driver.id } };
   }
 }

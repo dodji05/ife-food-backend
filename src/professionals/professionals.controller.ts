@@ -130,6 +130,14 @@ export class ProfessionalsController {
     return this.professionalsService.deletePromoCode(user.id, promoId);
   }
 
+  // ── Reviews ───────────────────────────────────────────────────────────────
+  @Get('me/reviews')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Get my reviews' })
+  getReviews(@CurrentUser() user: any) {
+    return this.professionalsService.getReviews(user.id);
+  }
+
   // ── Documents ─────────────────────────────────────────────────────────────
   @Get('me/documents')
   @ApiBearerAuth('JWT')

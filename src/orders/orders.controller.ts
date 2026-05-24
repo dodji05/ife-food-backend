@@ -27,8 +27,12 @@ export class OrdersController {
 
   @Get('professional')
   @ApiOperation({ summary: 'Get professional orders' })
-  getProfessionalOrders(@CurrentUser() user: any, @Query() pagination: PaginationDto) {
-    return this.ordersService.getProfessionalOrders(user.professional?.id, pagination);
+  getProfessionalOrders(
+    @CurrentUser() user: any,
+    @Query() pagination: PaginationDto,
+    @Query('status') status?: string,
+  ) {
+    return this.ordersService.getProfessionalOrders(user.professional?.id, pagination, status);
   }
 
   @Get(':id')
@@ -59,5 +63,15 @@ export class OrdersController {
   @ApiOperation({ summary: 'Leave a tip for the driver after delivery' })
   submitTip(@Param('id') id: string, @CurrentUser() user: any, @Body('amount') amount: number) {
     return this.ordersService.submitTip(user.id, id, Number(amount));
+  }
+
+  @Post(':id/assign-driver/:driverUserId')
+  @ApiOperation({ summary: 'Professional manually assigns a favorite driver' })
+  assignDriver(
+    @Param('id') id: string,
+    @Param('driverUserId') driverUserId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.ordersService.assignDriver(id, driverUserId, user.id);
   }
 }
