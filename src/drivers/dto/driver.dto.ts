@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsIn, IsBoolean, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsIn, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDriverDto {
@@ -26,18 +26,7 @@ export class UpdateLocationDto {
   @IsNumber() @Min(-180) @Max(180) lng: number;
 }
 
-export class CreateDriverZoneDto {
-  @ApiProperty() @IsString() name: string;
-  @ApiProperty() @IsString() city: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() country?: string;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() radiusKm?: number;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() isDefault?: boolean;
-}
-
-export class UpdateDriverZoneDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() city?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() country?: string;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() radiusKm?: number;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() isDefault?: boolean;
+export class SelectDriverZoneDto {
+  @ApiProperty({ description: 'ID of a DeliveryZone created by admin' })
+  @IsString() deliveryZoneId: string;
 }

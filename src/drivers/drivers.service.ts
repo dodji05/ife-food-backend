@@ -2,8 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException, ConflictException, B
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
-import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto, CreateDriverZoneDto, UpdateDriverZoneDto } from './dto/driver.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { UploadsService } from '../uploads/uploads.service';
+import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto, SelectDriverZoneDto } from './dto/driver.dto';
 
 // Limite max de missions actives en parallèle par driver.
 // Aligné sur la valeur par défaut côté mobile (Driver.maxConcurrentDeliveries=3).
@@ -23,6 +23,7 @@ export class DriversService {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private deliveriesGateway: DeliveriesGateway,
+    private uploads: UploadsService,
   ) {}
 
   async register(userId: string, dto: CreateDriverDto) {
@@ -192,8 +193,8 @@ export class DriversService {
       const codeEnabled = (confirmCfg?.value as any)?.enabled ?? false;
       if (codeEnabled) {
         const order = await this.prisma.order.findUnique({
-          where: { id: orderId }, select: { deliveryCode: true },
-        });
+          where: { id: orderId }, select: { deliveryCode: true } as any,
+        }) as any;
         if (!order?.deliveryCode || confirmCode !== order.deliveryCode) {
           throw new BadRequestException('Code de confirmation invalide');
         }
@@ -422,7 +423,6 @@ export class DriversService {
     });
 
     // Credit professional (total - commission)
-    const prof = await this.prisma.professional.findUnique({ where: { id: order.professionalId } });
     const profAmount = order.subtotal - order.commissionAmount;
     await this.prisma.transaction.create({
       data: { professionalId: order.professionalId, type: 'PAYOUT', amount: profAmount, currency: order.currency, status: 'PENDING', description: `Revenue for order ${orderId}` },
@@ -434,69 +434,72 @@ export class DriversService {
     });
   }
 
-  // ── Zone CRUD ────────────────────────────────────────────────────────────
+  // ── Sélection de zones (zones créées par l'admin) ────────────────────────
 
+  /** Retourne toutes les DeliveryZone actives avec un flag `selected` indiquant
+   *  si le livreur a déjà sélectionné cette zone. */
   async getZones(userId: string) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { userId },
+      select: { id: true, selectedZones: { select: { deliveryZoneId: true } } },
+    });
+    if (!driver) throw new NotFoundException('Driver profile not found');
+
+    const allZones = await this.prisma.deliveryZone.findMany({
+      where: { isActive: true },
+      orderBy: [{ country: 'asc' }, { name: 'asc' }],
+    });
+
+    const selectedIds = new Set(driver.selectedZones.map((s) => s.deliveryZoneId));
+    return {
+      data: allZones.map((z) => ({ ...z, selected: selectedIds.has(z.id) })),
+    };
+  }
+
+  /** Le livreur sélectionne une zone admin (idempotent). */
+  async addZone(userId: string, dto: SelectDriverZoneDto) {
     const driver = await this.prisma.driver.findUnique({ where: { userId }, select: { id: true } });
     if (!driver) throw new NotFoundException('Driver profile not found');
-    const zones = await this.prisma.driverZone.findMany({
+
+    const zone = await this.prisma.deliveryZone.findUnique({ where: { id: dto.deliveryZoneId } });
+    if (!zone || !zone.isActive) throw new NotFoundException('Zone not found or inactive');
+
+    await this.prisma.driverDeliveryZone.upsert({
+      where: { driverId_deliveryZoneId: { driverId: driver.id, deliveryZoneId: dto.deliveryZoneId } },
+      create: { driverId: driver.id, deliveryZoneId: dto.deliveryZoneId },
+      update: {},
+    });
+    return { data: { selected: true, deliveryZoneId: dto.deliveryZoneId } };
+  }
+
+  /** Le livreur désélectionne une zone admin. */
+  async deleteZone(userId: string, deliveryZoneId: string) {
+    const driver = await this.prisma.driver.findUnique({ where: { userId }, select: { id: true } });
+    if (!driver) throw new NotFoundException('Driver profile not found');
+    await this.prisma.driverDeliveryZone.deleteMany({
+      where: { driverId: driver.id, deliveryZoneId },
+    });
+    return { data: { selected: false, deliveryZoneId } };
+  }
+
+  // ── Documents ────────────────────────────────────────────────────────────
+
+  async getDocuments(userId: string) {
+    const driver = await this.prisma.driver.findUnique({ where: { userId }, select: { id: true } });
+    if (!driver) throw new NotFoundException('Driver profile not found');
+    const docs = await this.prisma.document.findMany({
       where: { driverId: driver.id },
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+      orderBy: { createdAt: 'desc' },
     });
-    return { data: zones };
+    return { data: docs };
   }
 
-  async addZone(userId: string, dto: CreateDriverZoneDto) {
+  async uploadDocument(userId: string, file: Express.Multer.File, docType: string) {
     const driver = await this.prisma.driver.findUnique({ where: { userId }, select: { id: true } });
     if (!driver) throw new NotFoundException('Driver profile not found');
-
-    // Si isDefault demandé, retire le flag des autres zones.
-    if (dto.isDefault) {
-      await this.prisma.driverZone.updateMany({
-        where: { driverId: driver.id },
-        data: { isDefault: false },
-      });
-    }
-
-    const zone = await this.prisma.driverZone.create({
-      data: {
-        driverId: driver.id,
-        name: dto.name,
-        city: dto.city,
-        country: dto.country ?? 'BJ',
-        radiusKm: dto.radiusKm ?? 10,
-        isDefault: dto.isDefault ?? false,
-      },
-    });
-    return { data: zone };
-  }
-
-  async updateZone(userId: string, zoneId: string, dto: UpdateDriverZoneDto) {
-    const driver = await this.prisma.driver.findUnique({ where: { userId }, select: { id: true } });
-    if (!driver) throw new NotFoundException('Driver profile not found');
-    const zone = await this.prisma.driverZone.findUnique({ where: { id: zoneId } });
-    if (!zone || zone.driverId !== driver.id) throw new NotFoundException('Zone not found');
-
-    if (dto.isDefault) {
-      await this.prisma.driverZone.updateMany({
-        where: { driverId: driver.id, id: { not: zoneId } },
-        data: { isDefault: false },
-      });
-    }
-
-    const updated = await this.prisma.driverZone.update({
-      where: { id: zoneId },
-      data: { ...dto },
-    });
-    return { data: updated };
-  }
-
-  async deleteZone(userId: string, zoneId: string) {
-    const driver = await this.prisma.driver.findUnique({ where: { userId }, select: { id: true } });
-    if (!driver) throw new NotFoundException('Driver profile not found');
-    const zone = await this.prisma.driverZone.findUnique({ where: { id: zoneId } });
-    if (!zone || zone.driverId !== driver.id) throw new NotFoundException('Zone not found');
-    await this.prisma.driverZone.delete({ where: { id: zoneId } });
-    return { data: { deleted: true } };
+    await this.prisma.document.deleteMany({ where: { driverId: driver.id, type: docType } });
+    const url = await this.uploads.uploadFile(file, 'ife-food/documents/driver');
+    const doc = await this.prisma.document.create({ data: { driverId: driver.id, type: docType, url } });
+    return { data: doc };
   }
 }

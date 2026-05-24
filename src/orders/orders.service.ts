@@ -111,7 +111,7 @@ export class OrdersService {
         select: {
           id: true, userId: true, vehicleType: true,
           zoneCity: true, currentLat: true, currentLng: true,
-          zones: { select: { city: true, radiusKm: true } },
+          selectedZones: { select: { deliveryZone: { select: { fromCity: true } } } },
           _count: { select: { deliveries: { where: { status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any } } } } },
         },
       });
@@ -120,12 +120,12 @@ export class OrdersService {
       const available = eligibleDrivers.filter((d) => {
         if (d._count.deliveries >= (vehicleCapacities[d.vehicleType as string] ?? 3)) return false;
 
-        // Vérification de zone : DriverZone (multi-zones) en priorité,
-        // sinon fallback sur l'ancien champ zoneCity.
-        const hasZones = (d as any).zones?.length > 0;
-        if (hasZones) {
-          const zoneMatch = (d as any).zones.some(
-            (z: { city: string }) => z.city.toLowerCase() === proCity
+        // Vérification de zone : zones sélectionnées par le livreur (DriverDeliveryZone)
+        // en priorité, sinon fallback sur l'ancien champ zoneCity.
+        const selectedZones = (d as any).selectedZones as { deliveryZone: { fromCity: string | null } }[];
+        if (selectedZones?.length > 0) {
+          const zoneMatch = selectedZones.some(
+            (s) => s.deliveryZone.fromCity?.toLowerCase() === proCity
           );
           if (proCity && !zoneMatch) return false;
         } else if ((d as any).zoneCity && proCity && (d as any).zoneCity.toLowerCase() !== proCity) {

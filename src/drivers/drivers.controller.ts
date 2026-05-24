@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { DriversService } from './drivers.service';
 import { OrdersService } from '../orders/orders.service';
-import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto, CreateDriverZoneDto, UpdateDriverZoneDto } from './dto/driver.dto';
+import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto, SelectDriverZoneDto } from './dto/driver.dto';
 
 @ApiTags('drivers')
 @ApiBearerAuth('JWT')
@@ -102,33 +104,50 @@ export class DriversController {
     return this.driversService.updateDeliveryStatus(user.id, orderId, status, photo, confirmCode);
   }
 
-  // ── Zones de livraison ───────────────────────────────────────────────────
+  // ── Zones de livraison (sélection parmi zones admin) ────────────────────
 
   @Get('me/zones')
-  @ApiOperation({ summary: 'List driver activity zones' })
+  @ApiOperation({ summary: 'All admin delivery zones with selected flag for this driver' })
   getZones(@CurrentUser() user: any) {
     return this.driversService.getZones(user.id);
   }
 
-  @Post('me/zones')
-  @ApiOperation({ summary: 'Add an activity zone' })
-  addZone(@CurrentUser() user: any, @Body() dto: CreateDriverZoneDto) {
-    return this.driversService.addZone(user.id, dto);
-  }
-
-  @Patch('me/zones/:zoneId')
-  @ApiOperation({ summary: 'Update an activity zone' })
-  updateZone(
-    @CurrentUser() user: any,
-    @Param('zoneId') zoneId: string,
-    @Body() dto: UpdateDriverZoneDto,
-  ) {
-    return this.driversService.updateZone(user.id, zoneId, dto);
+  @Post('me/zones/:zoneId/select')
+  @ApiOperation({ summary: 'Select a delivery zone' })
+  addZone(@CurrentUser() user: any, @Param('zoneId') zoneId: string) {
+    return this.driversService.addZone(user.id, { deliveryZoneId: zoneId });
   }
 
   @Delete('me/zones/:zoneId')
-  @ApiOperation({ summary: 'Delete an activity zone' })
+  @ApiOperation({ summary: 'Deselect a delivery zone' })
   deleteZone(@CurrentUser() user: any, @Param('zoneId') zoneId: string) {
     return this.driversService.deleteZone(user.id, zoneId);
+  }
+
+  // ── Documents ────────────────────────────────────────────────────────────────
+
+  @Get('me/documents')
+  @ApiOperation({ summary: 'List driver documents' })
+  getDocuments(@CurrentUser() user: any) {
+    return this.driversService.getDocuments(user.id);
+  }
+
+  @Post('me/documents')
+  @ApiOperation({ summary: 'Upload a driver document (ID card or license)' })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_, file, cb) => {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      cb(allowed.includes(file.mimetype) ? null : new Error('File type not allowed'), allowed.includes(file.mimetype));
+    },
+  }))
+  uploadDocument(
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('docType') docType: string,
+  ) {
+    return this.driversService.uploadDocument(user.id, file, docType);
   }
 }
