@@ -39,8 +39,8 @@ export class CreateProductDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isAvailable?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isMenu?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsNumber() stock?: number;
-  @ApiPropertyOptional() @IsOptional() @IsObject() variants?: any;
-  @ApiPropertyOptional() @IsOptional() @IsObject() options?: any;
+  @ApiPropertyOptional() @IsOptional() @IsArray() variants?: any[];
+  @ApiPropertyOptional() @IsOptional() @IsArray() options?: any[];
 }
 
 export class UpdateProductDto {
@@ -53,6 +53,6 @@ export class UpdateProductDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isAvailable?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isMenu?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsNumber() stock?: number;
-  @ApiPropertyOptional() @IsOptional() @IsObject() variants?: any;
-  @ApiPropertyOptional() @IsOptional() @IsObject() options?: any;
+  @ApiPropertyOptional() @IsOptional() @IsArray() variants?: any[];
+  @ApiPropertyOptional() @IsOptional() @IsArray() options?: any[];
 }
