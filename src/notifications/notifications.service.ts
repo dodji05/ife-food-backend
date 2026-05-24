@@ -70,7 +70,7 @@ export class NotificationsService {
     if (!order) return;
 
     const statusMessages: Record<string, { title: string; body: string; recipients: string[] }> = {
-      PAID:             { title: 'Nouvelle commande !', body: 'Vous avez une nouvelle commande.', recipients: [order.professional.userId] },
+      PAID:             { title: 'Nouvelle commande !', body: `Un client a passé une commande de ${order.totalAmount.toLocaleString('fr-FR')} ${order.currency} — chez ${order.professional.businessName}`, recipients: [order.professional.userId] },
       ACCEPTED:         { title: 'Commande acceptée', body: 'Votre commande a été acceptée.', recipients: [order.clientId] },
       IN_PREPARATION:   { title: 'En préparation', body: 'Votre commande est en cours de préparation.', recipients: [order.clientId] },
       DRIVER_ASSIGNED:  { title: 'Livreur assigné', body: 'Un livreur a été assigné à votre commande.', recipients: [order.clientId, order.professional.userId] },
