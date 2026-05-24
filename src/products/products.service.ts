@@ -151,11 +151,10 @@ export class ProductsService {
       throw new ForbiddenException("Ce produit ne vous appartient pas");
     }
 
-    // Upload vers Cloudinary, folder dédié pour faciliter la purge/quota.
     const imageUrl = await this.uploads.uploadFile(file, 'ife-food/products');
 
-    // Persiste l'URL sur le produit. Pas de soft-delete de l'ancienne image —
-    // Cloudinary la conservera (purge à programmer côté admin si besoin).
+    // Persiste la nouvelle URL. L'ancienne image reste sur disque —
+    // nettoyage à planifier côté admin si besoin.
     await this.prisma.product.update({
       where: { id: productId },
       data: { imageUrl },
