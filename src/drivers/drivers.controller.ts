@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { DriversService } from './drivers.service';
@@ -51,7 +52,8 @@ export class DriversController {
   }
 
   @Patch('me/location')
-  @ApiOperation({ summary: 'Update GPS position (every 5 seconds)' })
+  @ApiOperation({ summary: 'Update GPS position' })
+  @Throttle({ default: { limit: 30, ttl: 10000 } })
   updateLocation(@CurrentUser() user: any, @Body() dto: UpdateLocationDto) {
     return this.driversService.updateLocation(user.id, dto);
   }

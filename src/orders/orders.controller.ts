@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto, UpdateOrderStatusDto } from './dto/order.dto';
+import { CreateOrderDto, UpdateOrderStatusDto, ProfessionalOrdersQueryDto } from './dto/order.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('orders')
@@ -30,9 +30,9 @@ export class OrdersController {
   getProfessionalOrders(
     @CurrentUser() user: any,
     @Query() pagination: PaginationDto,
-    @Query('status') status?: string,
+    @Query() query: ProfessionalOrdersQueryDto,
   ) {
-    return this.ordersService.getProfessionalOrders(user.professional?.id, pagination, status);
+    return this.ordersService.getProfessionalOrders(user.professional?.id, pagination, query.status);
   }
 
   @Get(':id')

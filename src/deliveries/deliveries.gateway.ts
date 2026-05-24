@@ -107,6 +107,24 @@ export class DeliveriesGateway implements OnGatewayConnection {
     });
   }
 
+  /**
+   * Notifie le pro en temps réel qu'une nouvelle commande vient d'arriver
+   * (statut PAID). Émis sur la room `professional_<userId>` (auto-jointe
+   * à la connexion socket). Le pro n'a pas besoin de track_order pour la
+   * recevoir — il ne connaît pas encore l'orderId.
+   */
+  emitNewOrder(professionalUserId: string, payload: {
+    orderId: string;
+    totalAmount: number;
+    itemCount: number;
+    clientName?: string;
+    deliveryAddress: string;
+    createdAt: number;
+  }) {
+    if (!this.server) return;
+    this.server.to(`professional_${professionalUserId}`).emit('new_order', payload);
+  }
+
   /** Le livreur émet sa position. On vérifie que le driver émetteur est bien lui. */
   @SubscribeMessage('driver_location')
   async updateDriverLocation(
@@ -116,6 +134,12 @@ export class DeliveriesGateway implements OnGatewayConnection {
     const user = (client.handshake as any).user;
     if (!user) throw new WsException('Unauthorized');
 
+    const lat = Number(data.lat);
+    const lng = Number(data.lng);
+    if (!isFinite(lat) || !isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      throw new WsException('Invalid coordinates');
+    }
+
     // Le driverId du payload doit appartenir à l'utilisateur authentifié
     const driver = await this.prisma.driver.findUnique({ where: { id: data.driverId } });
     if (!driver || driver.userId !== user.id) {
@@ -124,13 +148,13 @@ export class DeliveriesGateway implements OnGatewayConnection {
 
     await this.prisma.driver.update({
       where: { id: data.driverId },
-      data: { currentLat: data.lat, currentLng: data.lng },
+      data: { currentLat: lat, currentLng: lng },
     });
     await this.prisma.delivery.updateMany({
       where: { orderId: data.orderId },
-      data: { driverLat: data.lat, driverLng: data.lng },
+      data: { driverLat: lat, driverLng: lng },
     });
-    this.server.to(`order_${data.orderId}`).emit('location_update', { lat: data.lat, lng: data.lng });
+    this.server.to(`order_${data.orderId}`).emit('location_update', { lat, lng });
   }
 
   /** Un client/livreur s'abonne au tracking d'une commande dont il est partie prenante. */

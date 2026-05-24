@@ -24,6 +24,15 @@ export class CreateOrderDto {
   @IsOptional() @IsDateString() scheduledDeliveryAt?: string;
 }
 
+const ORDER_STATUSES = ['PENDING_PAYMENT','PAID','ACCEPTED','REJECTED','IN_PREPARATION','READY_FOR_PICKUP','DRIVER_ASSIGNED','PICKED_UP','IN_DELIVERY','DELIVERED','CANCELLED','REFUNDED'] as const;
+
+export class ProfessionalOrdersQueryDto {
+  @ApiPropertyOptional({ enum: ORDER_STATUSES })
+  @IsOptional()
+  @IsIn(ORDER_STATUSES)
+  status?: string;
+}
+
 export class UpdateOrderStatusDto {
   @ApiProperty({ enum: ['ACCEPTED','REJECTED','IN_PREPARATION','READY_FOR_PICKUP','DRIVER_ASSIGNED','PICKED_UP','IN_DELIVERY','CANCELLED','DELIVERED'] })
   @IsIn(['ACCEPTED','REJECTED','IN_PREPARATION','READY_FOR_PICKUP','DRIVER_ASSIGNED','PICKED_UP','IN_DELIVERY','CANCELLED','DELIVERED'])
