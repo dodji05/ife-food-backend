@@ -439,4 +439,103 @@ export class ProfessionalsService {
       },
     };
   }
+
+  // ── Revenus détaillés ──────────────────────────────────────────────────────
+  async getEarnings(userId: string, days: number) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) return { data: { commissionRate: 15, summary: { today: {gross:0,net:0}, week: {gross:0,net:0}, month: {gross:0,net:0} }, totals: { gross:0, commission:0, net:0, orders:0 }, revenueByDay: [], recentOrders: [] } };
+
+    // Commission rate depuis PlatformConfig
+    const commCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
+    const commRaw = commCfg?.value && typeof commCfg.value === 'object' ? (commCfg.value as any) : {};
+    const proPct  = commRaw.professional?.value ?? commRaw.value ?? 15;
+
+    const now   = new Date();
+    const today = new Date(now); today.setHours(0,0,0,0);
+    const periodStart = new Date(today); periodStart.setDate(periodStart.getDate() - (days - 1));
+    const weekAgo  = new Date(today); weekAgo.setDate(weekAgo.getDate() - 6);
+    const monthAgo = new Date(today); monthAgo.setDate(monthAgo.getDate() - 29);
+
+    // Construit les jours du calendrier oldest → newest
+    const dayList: Date[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      dayList.push(d);
+    }
+
+    // Un aggregate par jour (subtotal + commissionAmount)
+    const dayAggs = await Promise.all(
+      dayList.map((dayStart) => {
+        const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+        return this.prisma.order.aggregate({
+          where: { professionalId: prof.id, status: 'DELIVERED', createdAt: { gte: dayStart, lt: dayEnd } },
+          _sum: { subtotal: true, commissionAmount: true },
+          _count: true,
+        });
+      }),
+    );
+
+    const revenueByDay = dayList.map((d, i) => {
+      const gross      = Number(dayAggs[i]._sum.subtotal       ?? 0);
+      const commission = Number(dayAggs[i]._sum.commissionAmount ?? 0);
+      return { date: d.toISOString().substring(0,10), gross, commission, net: gross - commission, orders: dayAggs[i]._count };
+    });
+
+    // Totaux période
+    const periodAgg = await this.prisma.order.aggregate({
+      where: { professionalId: prof.id, status: 'DELIVERED', createdAt: { gte: periodStart } },
+      _sum: { subtotal: true, commissionAmount: true }, _count: true,
+    });
+    const periodGross = Number(periodAgg._sum.subtotal ?? 0);
+    const periodComm  = Number(periodAgg._sum.commissionAmount ?? 0);
+
+    // Résumé fixe today / week / month
+    const [todayAgg, weekAgg, monthAgg] = await Promise.all([
+      this.prisma.order.aggregate({ where: { professionalId: prof.id, status: 'DELIVERED', createdAt: { gte: today } }, _sum: { subtotal: true, commissionAmount: true } }),
+      this.prisma.order.aggregate({ where: { professionalId: prof.id, status: 'DELIVERED', createdAt: { gte: weekAgo } }, _sum: { subtotal: true, commissionAmount: true } }),
+      this.prisma.order.aggregate({ where: { professionalId: prof.id, status: 'DELIVERED', createdAt: { gte: monthAgo } }, _sum: { subtotal: true, commissionAmount: true } }),
+    ]);
+
+    const _ns = (agg: any) => {
+      const g = Number(agg._sum.subtotal ?? 0);
+      const c = Number(agg._sum.commissionAmount ?? 0);
+      return { gross: g, net: g - c };
+    };
+
+    // Dernières commandes livrées
+    const recentRaw = await this.prisma.order.findMany({
+      where: { professionalId: prof.id, status: 'DELIVERED' },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { id: true, createdAt: true, subtotal: true, commissionAmount: true, totalAmount: true, _count: { select: { items: true } } },
+    });
+    const recentOrders = recentRaw.map(o => ({
+      id:               o.id,
+      createdAt:        o.createdAt,
+      subtotal:         Number(o.subtotal),
+      commissionAmount: Number(o.commissionAmount),
+      netRevenue:       Number(o.subtotal) - Number(o.commissionAmount),
+      total:            Number(o.totalAmount),
+      itemCount:        o._count.items,
+    }));
+
+    return {
+      data: {
+        commissionRate: proPct,
+        summary: {
+          today: _ns(todayAgg),
+          week:  _ns(weekAgg),
+          month: _ns(monthAgg),
+        },
+        totals: {
+          gross:      periodGross,
+          commission: periodComm,
+          net:        periodGross - periodComm,
+          orders:     periodAgg._count,
+        },
+        revenueByDay,
+        recentOrders,
+      },
+    };
+  }
 }

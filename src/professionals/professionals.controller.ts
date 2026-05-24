@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -32,6 +32,17 @@ export class ProfessionalsController {
   @ApiOperation({ summary: 'Get professional dashboard KPIs' })
   getDashboard(@CurrentUser() user: any) {
     return this.professionalsService.getDashboard(user.id);
+  }
+
+  @Get('me/earnings')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Get professional earnings breakdown' })
+  getEarnings(
+    @CurrentUser() user: any,
+    @Query('period', new DefaultValuePipe(30), ParseIntPipe) period: number,
+  ) {
+    const days = [7, 30, 90].includes(period) ? period : 30;
+    return this.professionalsService.getEarnings(user.id, days);
   }
 
   @Patch('me')
