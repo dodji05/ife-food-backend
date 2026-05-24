@@ -212,9 +212,15 @@ export class DriversService {
     const today = new Date(); today.setHours(0,0,0,0);
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - today.getDay());
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    const [todayDeliveries, allDeliveries, avgRating, todayEarningsAgg, weekEarningsAgg, totalEarningsAgg] = await Promise.all([
+    const [
+      todayDeliveries, weekDeliveries, monthDeliveries, allDeliveries, avgRating,
+      todayEarningsAgg, weekEarningsAgg, monthEarningsAgg, totalEarningsAgg,
+    ] = await Promise.all([
       this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED', createdAt: { gte: today } } }),
+      this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED', createdAt: { gte: weekStart } } }),
+      this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED', createdAt: { gte: monthStart } } }),
       this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED' } }),
       this.prisma.review.aggregate({ where: { driverId: driver.id }, _avg: { driverRating: true } }),
       this.prisma.transaction.aggregate({
@@ -226,6 +232,10 @@ export class DriversService {
         _sum: { amount: true },
       }),
       this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'DELIVERY_FEE', status: 'COMPLETED', createdAt: { gte: monthStart } },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
         where: { driverId: driver.id, type: 'DELIVERY_FEE', status: 'COMPLETED' },
         _sum: { amount: true },
       }),
@@ -233,11 +243,14 @@ export class DriversService {
 
     return { data: {
       todayDeliveries,
+      weekDeliveries,
+      monthDeliveries,
       allDeliveries,
-      avgRating:     avgRating._avg.driverRating,
-      todayEarnings: todayEarningsAgg._sum.amount ?? 0,
-      weekEarnings:  weekEarningsAgg._sum.amount  ?? 0,
-      totalEarnings: totalEarningsAgg._sum.amount ?? 0,
+      avgRating:      avgRating._avg.driverRating,
+      todayEarnings:  todayEarningsAgg._sum.amount  ?? 0,
+      weekEarnings:   weekEarningsAgg._sum.amount   ?? 0,
+      monthEarnings:  monthEarningsAgg._sum.amount  ?? 0,
+      totalEarnings:  totalEarningsAgg._sum.amount  ?? 0,
     } };
   }
 
