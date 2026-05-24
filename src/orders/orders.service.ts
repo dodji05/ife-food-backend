@@ -111,14 +111,27 @@ export class OrdersService {
         select: {
           id: true, userId: true, vehicleType: true,
           zoneCity: true, currentLat: true, currentLng: true,
+          zones: { select: { city: true, radiusKm: true } },
           _count: { select: { deliveries: { where: { status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any } } } } },
         },
       });
 
-      const proCity = order.professional.city;
+      const proCity = order.professional.city?.toLowerCase() ?? '';
       const available = eligibleDrivers.filter((d) => {
         if (d._count.deliveries >= (vehicleCapacities[d.vehicleType as string] ?? 3)) return false;
-        if (d.zoneCity && proCity && d.zoneCity !== proCity) return false;
+
+        // Vérification de zone : DriverZone (multi-zones) en priorité,
+        // sinon fallback sur l'ancien champ zoneCity.
+        const hasZones = (d as any).zones?.length > 0;
+        if (hasZones) {
+          const zoneMatch = (d as any).zones.some(
+            (z: { city: string }) => z.city.toLowerCase() === proCity
+          );
+          if (proCity && !zoneMatch) return false;
+        } else if ((d as any).zoneCity && proCity && (d as any).zoneCity.toLowerCase() !== proCity) {
+          return false;
+        }
+
         if (d.currentLat != null && d.currentLng != null &&
             haversine(d.currentLat, d.currentLng, order.professional.lat, order.professional.lng) > 20) return false;
         return true;

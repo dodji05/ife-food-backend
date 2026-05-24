@@ -1,11 +1,11 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { DriversService } from './drivers.service';
 import { OrdersService } from '../orders/orders.service';
-import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto } from './dto/driver.dto';
+import { CreateDriverDto, UpdateDriverDto, UpdateLocationDto, CreateDriverZoneDto, UpdateDriverZoneDto } from './dto/driver.dto';
 
 @ApiTags('drivers')
 @ApiBearerAuth('JWT')
@@ -93,5 +93,35 @@ export class DriversController {
     @Body('confirmPhoto') photo?: string,
   ) {
     return this.driversService.updateDeliveryStatus(user.id, orderId, status, photo);
+  }
+
+  // ── Zones de livraison ───────────────────────────────────────────────────
+
+  @Get('me/zones')
+  @ApiOperation({ summary: 'List driver activity zones' })
+  getZones(@CurrentUser() user: any) {
+    return this.driversService.getZones(user.id);
+  }
+
+  @Post('me/zones')
+  @ApiOperation({ summary: 'Add an activity zone' })
+  addZone(@CurrentUser() user: any, @Body() dto: CreateDriverZoneDto) {
+    return this.driversService.addZone(user.id, dto);
+  }
+
+  @Patch('me/zones/:zoneId')
+  @ApiOperation({ summary: 'Update an activity zone' })
+  updateZone(
+    @CurrentUser() user: any,
+    @Param('zoneId') zoneId: string,
+    @Body() dto: UpdateDriverZoneDto,
+  ) {
+    return this.driversService.updateZone(user.id, zoneId, dto);
+  }
+
+  @Delete('me/zones/:zoneId')
+  @ApiOperation({ summary: 'Delete an activity zone' })
+  deleteZone(@CurrentUser() user: any, @Param('zoneId') zoneId: string) {
+    return this.driversService.deleteZone(user.id, zoneId);
   }
 }
