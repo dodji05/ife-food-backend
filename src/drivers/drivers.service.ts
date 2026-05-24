@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
@@ -173,13 +173,32 @@ export class DriversService {
     return { success: true };
   }
 
-  async updateDeliveryStatus(userId: string, orderId: string, status: string, confirmPhoto?: string) {
+  async updateDeliveryStatus(
+    userId: string, orderId: string, status: string,
+    confirmPhoto?: string, confirmCode?: string,
+  ) {
     const driver = await this.prisma.driver.findUnique({ where: { userId } });
     if (!driver) throw new NotFoundException();
 
     const delivery = await this.prisma.delivery.findUnique({ where: { orderId } });
     if (!delivery) throw new NotFoundException('Delivery not found');
     if (delivery.driverId !== driver.id) throw new ForbiddenException();
+
+    // Validation du code de confirmation client (si la feature est activée par l'admin).
+    if (status === 'DELIVERED') {
+      const confirmCfg = await this.prisma.platformConfig.findUnique({
+        where: { key: 'delivery_confirm_code' },
+      });
+      const codeEnabled = (confirmCfg?.value as any)?.enabled ?? false;
+      if (codeEnabled) {
+        const order = await this.prisma.order.findUnique({
+          where: { id: orderId }, select: { deliveryCode: true },
+        });
+        if (!order?.deliveryCode || confirmCode !== order.deliveryCode) {
+          throw new BadRequestException('Code de confirmation invalide');
+        }
+      }
+    }
 
     await this.prisma.delivery.update({
       where: { orderId },
@@ -289,14 +308,18 @@ export class DriversService {
 
   /** Config driver-facing (timeout mission + fournisseur navigation). */
   async getDriverConfig() {
-    const [timeoutCfg, navCfg] = await Promise.all([
+    const [timeoutCfg, navCfg, confirmCfg] = await Promise.all([
       this.prisma.platformConfig.findUnique({ where: { key: 'mission_accept_timeout' } }),
       this.prisma.platformConfig.findUnique({ where: { key: 'navigation_provider' } }),
+      this.prisma.platformConfig.findUnique({ where: { key: 'delivery_confirm_code' } }),
     ]);
+    const confirmVal = confirmCfg?.value as any;
     return {
       data: {
-        missionTimeoutSeconds: (timeoutCfg?.value as any)?.seconds    ?? 30,
-        navigationProvider:    (navCfg?.value   as any)?.provider     ?? 'GOOGLE_MAPS',
+        missionTimeoutSeconds:     (timeoutCfg?.value as any)?.seconds  ?? 30,
+        navigationProvider:        (navCfg?.value   as any)?.provider   ?? 'GOOGLE_MAPS',
+        confirmationCodeEnabled:   confirmVal?.enabled  ?? false,
+        confirmationCodeDigits:    confirmVal?.digits   ?? 4,
       },
     };
   }

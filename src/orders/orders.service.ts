@@ -279,6 +279,7 @@ export class OrdersService {
         paymentMethod: dto.paymentMethod as any,
         specialInstructions: dto.specialInstructions,
         scheduledDeliveryAt: dto.scheduledDeliveryAt ? new Date(dto.scheduledDeliveryAt) : null,
+        deliveryCode: String(Math.floor(1000 + Math.random() * 9000)),
         items: {
           create: orderItems.map((i) => ({
             productId: i.productId,

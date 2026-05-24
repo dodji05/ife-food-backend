@@ -91,8 +91,9 @@ export class DriversController {
     @Param('orderId') orderId: string,
     @Body('status') status: string,
     @Body('confirmPhoto') photo?: string,
+    @Body('confirmCode') confirmCode?: string,
   ) {
-    return this.driversService.updateDeliveryStatus(user.id, orderId, status, photo);
+    return this.driversService.updateDeliveryStatus(user.id, orderId, status, photo, confirmCode);
   }
 
   // ── Zones de livraison ───────────────────────────────────────────────────

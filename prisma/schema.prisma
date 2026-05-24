@@ -501,6 +501,7 @@ model Order {
   rejectedReason      String?
   weatherMultiplier   Float          @default(1)
   tipAmount           Float          @default(0)
+  deliveryCode        String?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
