@@ -66,14 +66,17 @@ export class DeliveriesGateway implements OnGatewayConnection {
     orderId: string;
     professionalName: string;
     professionalAddress?: string;
+    professionalPhone?: string;
     professionalLat?: number;
     professionalLng?: number;
     deliveryAddress: string;
+    deliveryZone?: string;
     deliveryLat?: number;
     deliveryLng?: number;
     deliveryFee: number;
     currency?: string;
     distanceKm?: number;
+    distanceToPickupKm?: number | null;
     estimatedMinutes?: number;
     items?: any[];
     driverUserId?: string;

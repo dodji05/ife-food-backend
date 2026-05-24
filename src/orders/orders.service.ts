@@ -38,86 +38,121 @@ export class OrdersService {
       const order = await this.prisma.order.findUnique({
         where: { id: orderId },
         include: {
-          professional: { select: { businessName: true, address: true, lat: true, lng: true, city: true } },
+          professional: { select: { businessName: true, address: true, phone: true, lat: true, lng: true, city: true } },
           items: { include: { product: true } },
         },
       });
       if (!order) return;
 
+      // Haversine réutilisable localement (en km).
       const toRad = (d: number) => (d * Math.PI) / 180;
-      const dLat = toRad(order.deliveryLat - order.professional.lat);
-      const dLng = toRad(order.deliveryLng - order.professional.lng);
-      const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(order.professional.lat)) *
-          Math.cos(toRad(order.deliveryLat)) *
-          Math.sin(dLng / 2) ** 2;
-      const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
-
-      const payload = {
-        orderId: order.id,
-        professionalName: order.professional.businessName,
-        professionalAddress: order.professional.address,
-        professionalLat: order.professional.lat,
-        professionalLng: order.professional.lng,
-        deliveryAddress: order.deliveryAddress,
-        deliveryLat: order.deliveryLat,
-        deliveryLng: order.deliveryLng,
-        deliveryFee: order.deliveryFee,
-        currency: order.currency,
-        distanceKm,
-        estimatedMinutes,
-        items: order.items,
+      const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+        const dLat = toRad(lat2 - lat1);
+        const dLng = toRad(lng2 - lng1);
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+        return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
       };
 
-      // Récupère les drivers éligibles : validated + available + quota OK.
-      // Constante MAX_CONCURRENT_DELIVERIES synchronisée avec drivers.service.ts
-      // (aligné sur le mobile Driver.maxConcurrentDeliveries=3).
-      const MAX_CONCURRENT_DELIVERIES = 3;
+      const distanceKm = haversine(
+        order.professional.lat, order.professional.lng,
+        order.deliveryLat, order.deliveryLng,
+      );
+      const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
+      const deliveryZone = (order as any).deliveryCity ?? order.professional.city ?? '';
+
+      // Capacités par type de véhicule — configurables via PlatformConfig
+      // key='vehicle_capacity'. Défauts : vélo=2, moto=5, voiture=10, pied=1.
+      const capConfig = await this.prisma.platformConfig.findUnique({ where: { key: 'vehicle_capacity' } });
+      const vehicleCapacities: Record<string, number> = {
+        BICYCLE:    2,
+        MOTORCYCLE: 5,
+        CAR:        10,
+        ON_FOOT:    1,
+        ...(capConfig?.value as any ?? {}),
+      };
+
+      const basePayload = {
+        orderId:             order.id,
+        professionalName:    order.professional.businessName,
+        professionalAddress: order.professional.address,
+        professionalPhone:   order.professional.phone ?? '',
+        professionalLat:     order.professional.lat,
+        professionalLng:     order.professional.lng,
+        deliveryAddress:     order.deliveryAddress,
+        deliveryZone,
+        deliveryLat:         order.deliveryLat,
+        deliveryLng:         order.deliveryLng,
+        deliveryFee:         order.deliveryFee,
+        currency:            order.currency,
+        distanceKm,
+        estimatedMinutes,
+        items:               order.items,
+      };
+
+      // Drivers éligibles : validated + available + quota non atteint.
       const eligibleDrivers = await this.prisma.driver.findMany({
-        where: {
-          status: 'VALIDATED' as any,
-          isAvailable: true,
-        },
+        where: { status: 'VALIDATED' as any, isAvailable: true },
         select: {
-          id: true, userId: true, zoneCity: true,
-          // Compte les missions actives pour appliquer le filtre quota.
+          id: true, userId: true, vehicleType: true,
+          zoneCity: true, currentLat: true, currentLng: true,
           _count: {
             select: {
               deliveries: {
-                where: {
-                  status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any },
-                },
+                where: { status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any } },
               },
             },
           },
         },
       });
 
-      const available = eligibleDrivers.filter(
-        (d) => d._count.deliveries < MAX_CONCURRENT_DELIVERIES);
+      const proCity = order.professional.city;
+      const available = eligibleDrivers.filter((d) => {
+        // 1. Quota véhicule
+        const maxCap = vehicleCapacities[d.vehicleType as string] ?? 3;
+        if (d._count.deliveries >= maxCap) return false;
+
+        // 2. Zone : le driver doit couvrir la ville du restaurant (si sa zone est définie)
+        if (d.zoneCity && proCity && d.zoneCity !== proCity) return false;
+
+        // 3. Proximité : si le driver a une position GPS, il doit être à <20 km du restaurant
+        if (d.currentLat != null && d.currentLng != null) {
+          const distToPickup = haversine(d.currentLat, d.currentLng, order.professional.lat, order.professional.lng);
+          if (distToPickup > 20) return false;
+        }
+
+        return true;
+      });
 
       if (available.length === 0) {
         this.logger.warn(`[dispatch] Aucun driver éligible pour order ${order.id}`);
         return;
       }
 
-      // Priorise les drivers de la même ville que le restaurant.
-      // Fallback : tous les drivers disponibles si aucun match géo.
-      const proCity = order.professional.city;
-      const sameCity = proCity
-        ? available.filter((d) => d.zoneCity && d.zoneCity === proCity)
-        : [];
-      const targets = sameCity.length > 0 ? sameCity : available;
+      this.logger.log(`[dispatch] order ${order.id} -> ${available.length} driver(s) eligible(s)`);
 
-      this.logger.log(
-        `[dispatch] order ${order.id} -> ${targets.length} driver(s) eligible(s)` +
-        (sameCity.length > 0 ? ` (zone ${proCity})` : ' (tous, pas de match zone)'));
+      for (const d of available) {
+        // Distance personnalisée driver → restaurant pour le payload socket et la notif push.
+        const distanceToPickupKm = (d.currentLat != null && d.currentLng != null)
+          ? haversine(d.currentLat, d.currentLng, order.professional.lat, order.professional.lng)
+          : null;
 
-      // Émission ciblée sur la room individuelle de chaque driver.
-      for (const d of targets) {
-        this.deliveriesGateway.emitNewMission({ ...payload, driverUserId: d.userId });
+        this.deliveriesGateway.emitNewMission({
+          ...basePayload,
+          distanceToPickupKm,
+          driverUserId: d.userId,
+        });
+
+        // Push FCM avec tous les détails de la mission (best-effort).
+        this.notifications.sendDriverMissionPush(d.userId, {
+          orderId:           order.id,
+          professionalName:  order.professional.businessName,
+          professionalAddress: order.professional.address,
+          deliveryZone,
+          distanceToPickupKm,
+          distanceKm,
+          deliveryFee:       order.deliveryFee,
+          currency:          order.currency,
+        }).catch(() => {});
       }
     } catch (e) {
       this.logger.error(`[dispatch] Erreur: ${e}`);
@@ -583,22 +618,36 @@ export class OrdersService {
       }),
     ]);
 
-    // Notifie le livreur (socket + FCM).
+    // Notifie le livreur (socket + FCM push enrichi).
+    const pro = order.professional as any;
+    const assignDeliveryZone = (order as any).deliveryCity ?? pro.city ?? '';
     this.deliveriesGateway.emitNewMission({
-      orderId: order.id,
-      professionalName: (order.professional as any).businessName,
-      professionalAddress: (order.professional as any).address,
-      professionalLat: (order.professional as any).lat,
-      professionalLng: (order.professional as any).lng,
-      deliveryAddress: order.deliveryAddress,
-      deliveryLat: order.deliveryLat,
-      deliveryLng: order.deliveryLng,
-      deliveryFee: order.deliveryFee,
-      currency: order.currency,
+      orderId:             order.id,
+      professionalName:    pro.businessName,
+      professionalAddress: pro.address,
+      professionalPhone:   pro.phone ?? '',
+      professionalLat:     pro.lat,
+      professionalLng:     pro.lng,
+      deliveryAddress:     order.deliveryAddress,
+      deliveryZone:        assignDeliveryZone,
+      deliveryLat:         order.deliveryLat,
+      deliveryLng:         order.deliveryLng,
+      deliveryFee:         order.deliveryFee,
+      currency:            order.currency,
       distanceKm,
       estimatedMinutes,
       driverUserId,
     });
+    this.notifications.sendDriverMissionPush(driverUserId, {
+      orderId:            order.id,
+      professionalName:   pro.businessName,
+      professionalAddress: pro.address,
+      deliveryZone:       assignDeliveryZone,
+      distanceToPickupKm: null,
+      distanceKm,
+      deliveryFee:        order.deliveryFee,
+      currency:           order.currency,
+    }).catch(() => {});
     this.deliveriesGateway.emitOrderStatus(orderId, 'DRIVER_ASSIGNED', { driverId: driver.id });
     this.notifications.sendOrderNotification(orderId, 'DRIVER_ASSIGNED').catch(() => {});
 

@@ -9,7 +9,13 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 // Aligné sur la valeur par défaut côté mobile (Driver.maxConcurrentDeliveries=3).
 // À transformer en config admin (PlatformConfig) quand on aura besoin de la
 // faire varier par driver ou par zone.
-const MAX_CONCURRENT_DELIVERIES = 3;
+/** Capacités par défaut si PlatformConfig key='vehicle_capacity' absent. */
+const DEFAULT_VEHICLE_CAPACITIES: Record<string, number> = {
+  BICYCLE:    2,
+  MOTORCYCLE: 5,
+  CAR:        10,
+  ON_FOOT:    1,
+};
 
 @Injectable()
 export class DriversService {
@@ -90,18 +96,23 @@ export class DriversService {
     const driver = await this.prisma.driver.findUnique({ where: { userId } });
     if (!driver) throw new NotFoundException();
 
-    // Vérifie le quota de missions actives. Le mobile a aussi cette limite
-    // (maxConcurrentDeliveries=3 par défaut) mais on protège côté backend
-    // contre une triche client ou un état désynchronisé.
+    // Quota par type de véhicule depuis PlatformConfig (défauts : vélo=2, moto=5, voiture=10).
+    const capConfig = await this.prisma.platformConfig.findUnique({ where: { key: 'vehicle_capacity' } });
+    const capacities: Record<string, number> = {
+      ...DEFAULT_VEHICLE_CAPACITIES,
+      ...(capConfig?.value as any ?? {}),
+    };
+    const maxCap = capacities[driver.vehicleType as string] ?? 3;
+
     const activeCount = await this.prisma.delivery.count({
       where: {
         driverId: driver.id,
         status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any },
       },
     });
-    if (activeCount >= MAX_CONCURRENT_DELIVERIES) {
+    if (activeCount >= maxCap) {
       throw new ConflictException(
-        `Quota atteint (${MAX_CONCURRENT_DELIVERIES} missions actives max)`);
+        `Quota atteint (${maxCap} missions actives max pour votre véhicule)`);
     }
 
     // Race condition fix : on encapsule dans une transaction et on catch

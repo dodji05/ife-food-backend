@@ -85,6 +85,34 @@ export class NotificationsService {
     await Promise.all(msg.recipients.map((uid) => this.sendPush(uid, msg.title, msg.body, { orderId, status })));
   }
 
+  /** Push FCM ciblé sur un driver pour une nouvelle mission. */
+  async sendDriverMissionPush(driverUserId: string, mission: {
+    orderId: string;
+    professionalName: string;
+    professionalAddress: string;
+    deliveryZone: string;
+    distanceToPickupKm: number | null;
+    distanceKm: number;
+    deliveryFee: number;
+    currency: string;
+  }) {
+    const pickupPart = mission.distanceToPickupKm != null
+      ? `À ${mission.distanceToPickupKm.toFixed(1)} km`
+      : mission.professionalAddress;
+    const zone = mission.deliveryZone || 'Livraison';
+    const title = `🛵 Nouvelle mission — ${mission.professionalName}`;
+    const body  = `${pickupPart} · ${zone} · ${mission.distanceKm.toFixed(1)} km · ${mission.deliveryFee.toFixed(0)} ${mission.currency}`;
+    await this.sendPush(driverUserId, title, body, {
+      orderId:              mission.orderId,
+      type:                 'NEW_MISSION',
+      professionalName:     mission.professionalName,
+      deliveryFee:          String(mission.deliveryFee),
+      distanceKm:           String(mission.distanceKm),
+      distanceToPickupKm:   mission.distanceToPickupKm != null ? String(mission.distanceToPickupKm) : '',
+      deliveryZone:         mission.deliveryZone,
+    });
+  }
+
   async sendToAllUsers(title: string, body: string, role?: string, countries?: string[]) {
     const where: any = {};
     if (role) where.role = role;
