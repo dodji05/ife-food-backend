@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto, UpdateOrderStatusDto, ProfessionalOrdersQueryDto } from './dto/order.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('orders')
 @ApiBearerAuth('JWT')
