@@ -47,8 +47,12 @@ export class DeliveriesService {
       orderBy: { createdAt: 'desc' },
       include: {
         order: {
-          include: {
-            professional: { select: { businessName: true, category: true } },
+          select: {
+            deliveryFee:     true,
+            deliveryAddress: true,
+            deliveryCity:    true,
+            currency:        true,
+            professional: { select: { businessName: true, address: true, city: true } },
           },
         },
       },
