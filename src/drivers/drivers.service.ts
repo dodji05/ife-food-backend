@@ -210,18 +210,35 @@ export class DriversService {
     if (!driver) throw new NotFoundException();
 
     const today = new Date(); today.setHours(0,0,0,0);
-    const [todayDeliveries, allDeliveries, avgRating] = await Promise.all([
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay());
+
+    const [todayDeliveries, allDeliveries, avgRating, todayEarningsAgg, weekEarningsAgg, totalEarningsAgg] = await Promise.all([
       this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED', createdAt: { gte: today } } }),
       this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED' } }),
       this.prisma.review.aggregate({ where: { driverId: driver.id }, _avg: { driverRating: true } }),
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'DELIVERY_FEE', status: 'COMPLETED', createdAt: { gte: today } },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'DELIVERY_FEE', status: 'COMPLETED', createdAt: { gte: weekStart } },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'DELIVERY_FEE', status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
     ]);
 
-    const earnings = await this.prisma.transaction.aggregate({
-      where: { driverId: driver.id, type: 'DELIVERY_FEE', status: 'COMPLETED' },
-      _sum: { amount: true },
-    });
-
-    return { data: { todayDeliveries, allDeliveries, avgRating: avgRating._avg.driverRating, totalEarnings: earnings._sum.amount ?? 0 } };
+    return { data: {
+      todayDeliveries,
+      allDeliveries,
+      avgRating:     avgRating._avg.driverRating,
+      todayEarnings: todayEarningsAgg._sum.amount ?? 0,
+      weekEarnings:  weekEarningsAgg._sum.amount  ?? 0,
+      totalEarnings: totalEarningsAgg._sum.amount ?? 0,
+    } };
   }
 
   async getActiveMissions(userId: string) {
@@ -230,7 +247,7 @@ export class DriversService {
     const deliveries = await this.prisma.delivery.findMany({
       where: {
         driverId: driver.id,
-        status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'IN_DELIVERY'] as any },
+        status: { in: ['ASSIGNED', 'HEADING_TO_PICKUP', 'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_DELIVERY'] as any },
       },
       include: {
         order: {
