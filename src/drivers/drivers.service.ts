@@ -247,6 +247,7 @@ export class DriversService {
     const [
       todayDeliveries, weekDeliveries, monthDeliveries, allDeliveries, avgRating,
       todayEarningsAgg, weekEarningsAgg, monthEarningsAgg, totalEarningsAgg,
+      totalTipsAgg, totalPayoutsAgg, pendingWithdrawalsAgg,
     ] = await Promise.all([
       this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED', createdAt: { gte: today } } }),
       this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED', createdAt: { gte: weekStart } } }),
@@ -269,19 +270,91 @@ export class DriversService {
         where: { driverId: driver.id, type: 'DELIVERY_FEE', status: 'COMPLETED' },
         _sum: { amount: true },
       }),
+      // Pourboires reçus (type TIP, status COMPLETED)
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'TIP', status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      // Virements déjà exécutés (WITHDRAWAL COMPLETED)
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'WITHDRAWAL' as any, status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      // Virements en attente (WITHDRAWAL PENDING) — déduits du solde disponible
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'WITHDRAWAL' as any, status: 'PENDING' },
+        _sum: { amount: true },
+      }),
     ]);
+
+    const totalCommissions = totalEarningsAgg._sum.amount ?? 0;
+    const totalTips        = totalTipsAgg._sum.amount     ?? 0;
+    const totalPaidOut     = totalPayoutsAgg._sum.amount  ?? 0;
+    const pendingPayouts   = pendingWithdrawalsAgg._sum.amount ?? 0;
+    const availableBalance = totalCommissions + totalTips - totalPaidOut - pendingPayouts;
 
     return { data: {
       todayDeliveries,
       weekDeliveries,
       monthDeliveries,
       allDeliveries,
-      avgRating:      avgRating._avg.driverRating,
-      todayEarnings:  todayEarningsAgg._sum.amount  ?? 0,
-      weekEarnings:   weekEarningsAgg._sum.amount   ?? 0,
-      monthEarnings:  monthEarningsAgg._sum.amount  ?? 0,
-      totalEarnings:  totalEarningsAgg._sum.amount  ?? 0,
+      avgRating:        avgRating._avg.driverRating,
+      todayEarnings:    todayEarningsAgg._sum.amount  ?? 0,
+      weekEarnings:     weekEarningsAgg._sum.amount   ?? 0,
+      monthEarnings:    monthEarningsAgg._sum.amount  ?? 0,
+      totalEarnings:    totalCommissions,
+      totalTips,
+      availableBalance: Math.max(0, availableBalance),
+      pendingPayouts,
     } };
+  }
+
+  async requestWithdrawal(userId: string, amount: number) {
+    const driver = await this.prisma.driver.findUnique({ where: { userId } });
+    if (!driver) throw new NotFoundException();
+    if (amount <= 0) throw new BadRequestException('Le montant doit être supérieur à 0');
+
+    // Recalcule le solde disponible en temps réel pour éviter les race conditions.
+    const [earningsAgg, tipsAgg, paidOutAgg, pendingAgg] = await Promise.all([
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'DELIVERY_FEE', status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'TIP', status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'WITHDRAWAL' as any, status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'WITHDRAWAL' as any, status: 'PENDING' },
+        _sum: { amount: true },
+      }),
+    ]);
+    const available = Math.max(0,
+      (earningsAgg._sum.amount ?? 0) + (tipsAgg._sum.amount ?? 0)
+      - (paidOutAgg._sum.amount ?? 0) - (pendingAgg._sum.amount ?? 0)
+    );
+
+    if (amount > available) {
+      throw new BadRequestException(
+        `Montant supérieur au solde disponible (${available.toFixed(0)} F)`
+      );
+    }
+
+    const withdrawal = await this.prisma.transaction.create({
+      data: {
+        driverId:    driver.id,
+        type:        'WITHDRAWAL' as any,
+        amount,
+        currency:    'XOF',
+        status:      'PENDING',
+        description: `Demande de virement — ${new Date().toLocaleDateString('fr-FR')}`,
+      },
+    });
+    return { data: withdrawal };
   }
 
   async getActiveMissions(userId: string) {
@@ -328,9 +401,13 @@ export class DriversService {
     const driver = await this.prisma.driver.findUnique({ where: { userId } });
     if (!driver) throw new NotFoundException();
     const transactions = await this.prisma.transaction.findMany({
-      where: { driverId: driver.id },
+      where: {
+        driverId: driver.id,
+        // Exclut COMMISSION et PAYOUT qui sont des transactions internes plateforme.
+        type: { in: ['DELIVERY_FEE', 'TIP', 'WITHDRAWAL'] as any },
+      },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: 150,
     });
     return { data: transactions };
   }

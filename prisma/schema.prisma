@@ -127,6 +127,7 @@ enum TransactionType {
   REFUND
   DELIVERY_FEE
   TIP
+  WITHDRAWAL
 }
 
 enum WalletTxType {

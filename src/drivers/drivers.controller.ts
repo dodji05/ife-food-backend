@@ -44,6 +44,12 @@ export class DriversController {
     return this.driversService.getEarnings(user.id);
   }
 
+  @Post('me/withdrawal')
+  @ApiOperation({ summary: 'Request a payout withdrawal' })
+  requestWithdrawal(@CurrentUser() user: any, @Body('amount') amount: number) {
+    return this.driversService.requestWithdrawal(user.id, amount);
+  }
+
   @Get('config')
   @ApiOperation({ summary: 'Driver-facing config (timeout, nav provider)' })
   getConfig() {
