@@ -1166,6 +1166,46 @@ export class AdminService {
     });
   }
 
+  private maskSecret(value: string): string {
+    if (!value || value.length <= 8) return '****';
+    return `${value.slice(0, 4)}****${value.slice(-4)}`;
+  }
+
+  async getPaymentCredentials() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentCredentials' } });
+    const raw = (cfg?.value as any) ?? {};
+    const masked: any = {};
+    for (const [gateway, creds] of Object.entries(raw)) {
+      masked[gateway] = {};
+      for (const [field, value] of Object.entries(creds as any)) {
+        if (field === 'sandbox' || typeof value !== 'string') {
+          (masked[gateway] as any)[field] = value;
+        } else {
+          (masked[gateway] as any)[field] = value ? this.maskSecret(value) : '';
+        }
+      }
+    }
+    return { data: masked };
+  }
+
+  async setPaymentCredentials(credentials: Record<string, Record<string, any>>) {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentCredentials' } });
+    const existing: any = (cfg?.value as any) ?? {};
+    const merged: any = {};
+    for (const [gateway, creds] of Object.entries(credentials)) {
+      merged[gateway] = { ...(existing[gateway] ?? {}) };
+      for (const [field, value] of Object.entries(creds)) {
+        if (value !== '__keep__') merged[gateway][field] = value;
+      }
+    }
+    await this.prisma.platformConfig.upsert({
+      where: { key: 'paymentCredentials' },
+      update: { value: merged },
+      create: { key: 'paymentCredentials', value: merged },
+    });
+    return { success: true };
+  }
+
   // ─── PROMO CODES ──────────────────────────
   async getPromoCodes() {
     return this.prisma.promoCode.findMany({ orderBy: { createdAt: 'desc' } });

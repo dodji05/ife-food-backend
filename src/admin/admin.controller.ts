@@ -220,6 +220,18 @@ export class AdminController {
     return this.adminService.setPaymentGateways(body);
   }
 
+  @Get('config/payment-credentials')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  getPaymentCredentials() { return this.adminService.getPaymentCredentials(); }
+
+  @Put('config/payment-credentials')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  setPaymentCredentials(@Body() body: any) {
+    return this.adminService.setPaymentCredentials(body);
+  }
+
   // PAYMENTS
   @Get('payments/stats')
   getPaymentStats() { return this.adminService.getPaymentStats(); }

@@ -29,6 +29,11 @@ export class PaymentsService {
     private deliveriesGateway: DeliveriesGateway,
   ) {}
 
+  private async loadGatewayCredentials(): Promise<any> {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentCredentials' } });
+    return (cfg?.value as any) ?? {};
+  }
+
   /**
    * Construit le payload Mission et broadcast `new_mission` à tous les
    * drivers en ligne. Méthode best-effort : tout throw est avalé pour ne
@@ -85,6 +90,7 @@ export class PaymentsService {
 
     const gw = gateway.toUpperCase() as PaymentGatewayName;
     let paymentData: any;
+    const dbCreds = await this.loadGatewayCredentials();
 
     switch (gw) {
       case PaymentGatewayName.STRIPE:
@@ -94,7 +100,7 @@ export class PaymentsService {
         paymentData = await this.paypal.createOrder(order.totalAmount, order.currency, orderId);
         break;
       case PaymentGatewayName.KKIAPAY:
-        paymentData = await this.kkiapay.initiatePayment(order.totalAmount, order.currency, orderId, order.client.phone);
+        paymentData = await this.kkiapay.initiatePayment(order.totalAmount, order.currency, orderId, order.client.phone, dbCreds.KKIAPAY);
         break;
       case PaymentGatewayName.FEDAPAY: {
         const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
@@ -105,6 +111,7 @@ export class PaymentsService {
           order.currency,
           orderId,
           { name: order.client.name ?? order.client.phone, email: order.client.email, phone: order.client.phone },
+          dbCreds.FEDAPAY,
         );
         break;
       }
@@ -149,8 +156,9 @@ export class PaymentsService {
         if (payload.status === 'SUCCESS') await this.confirmPayment(payload.reason, payload.transactionId);
         break;
       case PaymentGatewayName.FEDAPAY: {
+        const dbCreds = await this.loadGatewayCredentials();
         // Vérification signature HMAC-SHA256 (header X-FEDAPAY-SIGNATURE)
-        if (signature && !this.fedapay.verifySignature(payload, signature)) break;
+        if (signature && !this.fedapay.verifySignature(payload, signature, dbCreds.FEDAPAY)) break;
         const eventName: string = payload?.name ?? '';
         const tx = payload?.data?.object;
         const orderId: string | undefined = tx?.custom_metadata?.orderId;
