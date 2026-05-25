@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from './gateways/stripe.service';
 import { PaypalService } from './gateways/paypal.service';
 import { KkiapayService } from './gateways/kkiapay.service';
+import { FedapayService } from './gateways/fedapay.service';
 import { ConfigService } from '@nestjs/config';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
@@ -22,6 +23,7 @@ export class PaymentsService {
     private stripe: StripeService,
     private paypal: PaypalService,
     private kkiapay: KkiapayService,
+    private fedapay: FedapayService,
     private config: ConfigService,
     private notifications: NotificationsService,
     private deliveriesGateway: DeliveriesGateway,
@@ -94,6 +96,18 @@ export class PaymentsService {
       case PaymentGatewayName.KKIAPAY:
         paymentData = await this.kkiapay.initiatePayment(order.totalAmount, order.currency, orderId, order.client.phone);
         break;
+      case PaymentGatewayName.FEDAPAY: {
+        const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
+        const gateways = (platformCfg?.value as any) ?? {};
+        if (gateways.FEDAPAY === false) throw new BadRequestException('FedaPay n\'est pas disponible');
+        paymentData = await this.fedapay.createTransaction(
+          order.totalAmount,
+          order.currency,
+          orderId,
+          { name: order.client.name ?? order.client.phone, email: order.client.email, phone: order.client.phone },
+        );
+        break;
+      }
       case PaymentGatewayName.CASH_ON_DELIVERY: {
         // Vérifie que COD est activé dans la config plateforme
         const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
@@ -134,6 +148,20 @@ export class PaymentsService {
       case PaymentGatewayName.KKIAPAY:
         if (payload.status === 'SUCCESS') await this.confirmPayment(payload.reason, payload.transactionId);
         break;
+      case PaymentGatewayName.FEDAPAY: {
+        // Vérification signature HMAC-SHA256 (header X-FEDAPAY-SIGNATURE)
+        if (signature && !this.fedapay.verifySignature(payload, signature)) break;
+        const eventName: string = payload?.name ?? '';
+        const tx = payload?.data?.object;
+        const orderId: string | undefined = tx?.custom_metadata?.orderId;
+        if (!orderId) break;
+        if (eventName === 'transaction.approved') {
+          await this.confirmPayment(orderId, String(tx.id));
+        } else if (eventName === 'transaction.declined' || eventName === 'transaction.canceled') {
+          await this.failPayment(orderId);
+        }
+        break;
+      }
     }
     return { received: true };
   }

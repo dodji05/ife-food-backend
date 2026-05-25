@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Headers, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Param, Headers, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
@@ -21,9 +21,14 @@ export class PaymentsController {
   @Post('webhooks/:gateway')
   @Public()
   @ApiOperation({ summary: 'Receive payment gateway webhooks' })
-  webhook(@Param('gateway') gateway: string, @Req() req: Request, @Headers('stripe-signature') sig: string) {
-    // Pass raw body (Buffer) for Stripe signature verification; fallback to parsed body for other gateways
+  webhook(
+    @Param('gateway') gateway: string,
+    @Req() req: Request,
+    @Headers('stripe-signature') stripeSig: string,
+    @Headers('x-fedapay-signature') fedapaySig: string,
+  ) {
     const payload = (req as any).rawBody ?? req.body;
+    const sig = stripeSig || fedapaySig || '';
     return this.paymentsService.handleWebhook(gateway, payload, sig);
   }
 

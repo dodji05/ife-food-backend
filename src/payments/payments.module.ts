@@ -4,6 +4,7 @@ import { PaymentsService } from './payments.service';
 import { StripeService } from './gateways/stripe.service';
 import { PaypalService } from './gateways/paypal.service';
 import { KkiapayService } from './gateways/kkiapay.service';
+import { FedapayService } from './gateways/fedapay.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DeliveriesModule } from '../deliveries/deliveries.module';
 
@@ -15,7 +16,7 @@ import { DeliveriesModule } from '../deliveries/deliveries.module';
   // `new_mission` aux drivers en ligne dès qu'une commande est PAID.
   imports: [NotificationsModule, DeliveriesModule],
   controllers: [PaymentsController],
-  providers: [PaymentsService, StripeService, PaypalService, KkiapayService],
+  providers: [PaymentsService, StripeService, PaypalService, KkiapayService, FedapayService],
   exports: [PaymentsService],
 })
 export class PaymentsModule {}
