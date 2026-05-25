@@ -445,17 +445,21 @@ export class OrdersService {
       include: {
         items: { include: { product: true } },
         client: { select: { name: true, firstName: true, phone: true, avatarUrl: true } },
-        professional: { select: { businessName: true, address: true, phone: true, lat: true, lng: true } },
-        // `phone` ajouté : le mobile PRO affiche un bouton "Appeler le livreur"
-        // depuis le détail de commande, donc le tel est requis dans la réponse.
-        driver: { select: { licensePlate: true, vehicleType: true, user: { select: { name: true, firstName: true, phone: true, avatarUrl: true } } } },
+        // userId inclus pour la vérification d'accès (professionalId ≠ userId).
+        professional: { select: { userId: true, businessName: true, address: true, phone: true, lat: true, lng: true } },
+        driver: { select: { licensePlate: true, vehicleType: true, user: { select: { id: true, name: true, firstName: true, phone: true, avatarUrl: true } } } },
         delivery: true,
         payment: true,
         review: true,
       },
     });
     if (!order) throw new NotFoundException('Order not found');
-    if (order.clientId !== userId && order.professionalId !== userId && order.driverId !== userId) {
+    // order.clientId référence User directement.
+    // order.professionalId référence Professional (pas User) → on compare via professional.userId.
+    // order.driverId référence Driver (pas User) → on compare via driver.user.id.
+    const proUserId    = (order as any).professional?.userId as string | undefined;
+    const driverUserId = (order as any).driver?.user?.id    as string | undefined;
+    if (order.clientId !== userId && proUserId !== userId && driverUserId !== userId) {
       throw new ForbiddenException('Access denied');
     }
     return { data: order };
