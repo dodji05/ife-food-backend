@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { ProductsService } from './products.service';
-import { CreateProductDto, UpdateProductDto, CreateCategoryDto, UpdateCategoryDto, ReorderCategoriesDto } from './dto/product.dto';
+import { CreateProductDto, UpdateProductDto, CreateCategoryDto, UpdateCategoryDto, ReorderCategoriesDto, GetProductsQueryDto } from './dto/product.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('products')
@@ -120,7 +120,7 @@ export class ProductsController {
 
   @Get('professional/:id')
   @Public()
-  getByProfessional(@Param('id') id: string, @Query() pagination: PaginationDto) {
-    return this.productsService.getProducts(id, pagination);
+  getByProfessional(@Param('id') id: string, @Query() query: GetProductsQueryDto) {
+    return this.productsService.getProducts(id, query);
   }
 }

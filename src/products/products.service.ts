@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
-import { CreateProductDto, UpdateProductDto, CreateCategoryDto, UpdateCategoryDto, ReorderCategoriesDto } from './dto/product.dto';
+import { CreateProductDto, UpdateProductDto, CreateCategoryDto, UpdateCategoryDto, ReorderCategoriesDto, GetProductsQueryDto } from './dto/product.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -175,10 +175,13 @@ export class ProductsService {
     return this.getProducts(prof.id, pagination);
   }
 
-  async getProducts(professionalId: string, pagination: PaginationDto) {
+  async getProducts(professionalId: string, pagination: PaginationDto | GetProductsQueryDto) {
+    const isAvailable = (pagination as GetProductsQueryDto).isAvailable;
+    const where: any = { professionalId };
+    if (isAvailable !== undefined) where.isAvailable = isAvailable;
     const [products, total] = await Promise.all([
-      this.prisma.product.findMany({ where: { professionalId }, include: { category: true }, skip: pagination.skip, take: pagination.limit }),
-      this.prisma.product.count({ where: { professionalId } }),
+      this.prisma.product.findMany({ where, include: { category: true }, skip: pagination.skip, take: pagination.limit }),
+      this.prisma.product.count({ where }),
     ]);
     return { data: products, meta: { total, page: pagination.page, limit: pagination.limit } };
   }

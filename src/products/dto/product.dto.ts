@@ -1,10 +1,16 @@
 import { IsString, IsNumber, IsOptional, IsBoolean, IsObject, IsNotEmptyObject, IsArray, ArrayNotEmpty } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 // ⚠️ main.ts : ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }).
 // Tout champ SANS décorateur class-validator est rejeté avec
 // 'property X should not exist'. Pour les Map multilingues (name,
 // description, variants) on utilise @IsObject() pour les whitelister.
+
+export class GetProductsQueryDto extends PaginationDto {
+  @ApiPropertyOptional() @IsOptional() @Type(() => Boolean) @IsBoolean() isAvailable?: boolean;
+}
 
 export class CreateCategoryDto {
   @ApiProperty({ description: 'Multilingual name: { fr: "Plats", en: "Dishes" }' })
