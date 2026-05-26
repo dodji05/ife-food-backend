@@ -64,11 +64,11 @@ export class AdminController {
   // USERS
   @Get('users')
   getUsers(@Query() query: any) {
-    const { page, limit, role, country } = query;
+    const { page, limit, role, country, search } = query;
     const pagination = new PaginationDto();
     if (page) pagination.page = Number(page);
     if (limit) pagination.limit = Number(limit);
-    return this.adminService.getUsers(role, pagination, country);
+    return this.adminService.getUsers(role, pagination, country, search);
   }
 
   @Post('users')

@@ -453,10 +453,19 @@ export class AdminService {
   }
 
   // ─── USERS MANAGEMENT ─────────────────────
-  async getUsers(role?: string, pagination?: PaginationDto, country?: string) {
-    const where: any = {};
+  async getUsers(role?: string, pagination?: PaginationDto, country?: string, search?: string) {
+    const where: any = { deletedAt: null };
     if (role) where.role = role;
     if (country) where.countryCode = country;
+    if (search) {
+      const q = search.trim();
+      where.OR = [
+        { firstName: { contains: q, mode: 'insensitive' } },
+        { name:      { contains: q, mode: 'insensitive' } },
+        { phone:     { contains: q, mode: 'insensitive' } },
+        { email:     { contains: q, mode: 'insensitive' } },
+      ];
+    }
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({ where, orderBy: { createdAt: 'desc' }, skip: pagination?.skip, take: pagination?.limit }),
       this.prisma.user.count({ where }),
