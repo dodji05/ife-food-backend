@@ -1575,78 +1575,98 @@ export class AdminService {
   // ─── PAYS ─────────────────────────────────
   private readonly DEFAULT_COUNTRIES = [
     // Afrique de l'Ouest
-    { code: 'BJ', name: 'Bénin',               emoji: '🇧🇯', currency: 'XOF' },
-    { code: 'BF', name: 'Burkina Faso',         emoji: '🇧🇫', currency: 'XOF' },
-    { code: 'CV', name: 'Cap-Vert',             emoji: '🇨🇻', currency: 'CVE' },
-    { code: 'CI', name: "Côte d'Ivoire",        emoji: '🇨🇮', currency: 'XOF' },
-    { code: 'GM', name: 'Gambie',               emoji: '🇬🇲', currency: 'GMD' },
-    { code: 'GH', name: 'Ghana',                emoji: '🇬🇭', currency: 'GHS' },
-    { code: 'GN', name: 'Guinée',               emoji: '🇬🇳', currency: 'GNF' },
-    { code: 'GW', name: 'Guinée-Bissau',        emoji: '🇬🇼', currency: 'XOF' },
-    { code: 'LR', name: 'Liberia',              emoji: '🇱🇷', currency: 'LRD' },
-    { code: 'ML', name: 'Mali',                 emoji: '🇲🇱', currency: 'XOF' },
-    { code: 'MR', name: 'Mauritanie',           emoji: '🇲🇷', currency: 'MRU' },
-    { code: 'NE', name: 'Niger',                emoji: '🇳🇪', currency: 'XOF' },
-    { code: 'NG', name: 'Nigeria',              emoji: '🇳🇬', currency: 'NGN' },
-    { code: 'SN', name: 'Sénégal',              emoji: '🇸🇳', currency: 'XOF' },
-    { code: 'SL', name: 'Sierra Leone',         emoji: '🇸🇱', currency: 'SLL' },
-    { code: 'TG', name: 'Togo',                 emoji: '🇹🇬', currency: 'XOF' },
+    { code: 'BJ', name: 'Bénin',                  emoji: '🇧🇯', currency: 'XOF' },
+    { code: 'BF', name: 'Burkina Faso',            emoji: '🇧🇫', currency: 'XOF' },
+    { code: 'CV', name: 'Cap-Vert',                emoji: '🇨🇻', currency: 'CVE' },
+    { code: 'CI', name: "Côte d'Ivoire",           emoji: '🇨🇮', currency: 'XOF' },
+    { code: 'GM', name: 'Gambie',                  emoji: '🇬🇲', currency: 'GMD' },
+    { code: 'GH', name: 'Ghana',                   emoji: '🇬🇭', currency: 'GHS' },
+    { code: 'GN', name: 'Guinée',                  emoji: '🇬🇳', currency: 'GNF' },
+    { code: 'GW', name: 'Guinée-Bissau',           emoji: '🇬🇼', currency: 'XOF' },
+    { code: 'LR', name: 'Liberia',                 emoji: '🇱🇷', currency: 'LRD' },
+    { code: 'ML', name: 'Mali',                    emoji: '🇲🇱', currency: 'XOF' },
+    { code: 'MR', name: 'Mauritanie',              emoji: '🇲🇷', currency: 'MRU' },
+    { code: 'NE', name: 'Niger',                   emoji: '🇳🇪', currency: 'XOF' },
+    { code: 'NG', name: 'Nigeria',                 emoji: '🇳🇬', currency: 'NGN' },
+    { code: 'SN', name: 'Sénégal',                 emoji: '🇸🇳', currency: 'XOF' },
+    { code: 'SL', name: 'Sierra Leone',            emoji: '🇸🇱', currency: 'SLE' },
+    { code: 'TG', name: 'Togo',                    emoji: '🇹🇬', currency: 'XOF' },
     // Afrique Centrale
-    { code: 'AO', name: 'Angola',               emoji: '🇦🇴', currency: 'AOA' },
-    { code: 'CF', name: 'Centrafrique',          emoji: '🇨🇫', currency: 'XAF' },
-    { code: 'CM', name: 'Cameroun',             emoji: '🇨🇲', currency: 'XAF' },
-    { code: 'CG', name: 'Congo',                emoji: '🇨🇬', currency: 'XAF' },
-    { code: 'CD', name: 'RD Congo',             emoji: '🇨🇩', currency: 'CDF' },
-    { code: 'GQ', name: 'Guinée équatoriale',   emoji: '🇬🇶', currency: 'XAF' },
-    { code: 'GA', name: 'Gabon',                emoji: '🇬🇦', currency: 'XAF' },
-    { code: 'ST', name: 'São Tomé-et-Príncipe', emoji: '🇸🇹', currency: 'STN' },
-    { code: 'TD', name: 'Tchad',                emoji: '🇹🇩', currency: 'XAF' },
+    { code: 'AO', name: 'Angola',                  emoji: '🇦🇴', currency: 'AOA' },
+    { code: 'CF', name: 'Centrafrique',            emoji: '🇨🇫', currency: 'XAF' },
+    { code: 'CM', name: 'Cameroun',                emoji: '🇨🇲', currency: 'XAF' },
+    { code: 'CG', name: 'Congo',                   emoji: '🇨🇬', currency: 'XAF' },
+    { code: 'CD', name: 'RD Congo',                emoji: '🇨🇩', currency: 'CDF' },
+    { code: 'GQ', name: 'Guinée équatoriale',      emoji: '🇬🇶', currency: 'XAF' },
+    { code: 'GA', name: 'Gabon',                   emoji: '🇬🇦', currency: 'XAF' },
+    { code: 'ST', name: 'São Tomé-et-Príncipe',    emoji: '🇸🇹', currency: 'STN' },
+    { code: 'TD', name: 'Tchad',                   emoji: '🇹🇩', currency: 'XAF' },
     // Afrique de l'Est
-    { code: 'BI', name: 'Burundi',              emoji: '🇧🇮', currency: 'BIF' },
-    { code: 'KM', name: 'Comores',              emoji: '🇰🇲', currency: 'KMF' },
-    { code: 'DJ', name: 'Djibouti',             emoji: '🇩🇯', currency: 'DJF' },
-    { code: 'ER', name: 'Érythrée',             emoji: '🇪🇷', currency: 'ERN' },
-    { code: 'ET', name: 'Éthiopie',             emoji: '🇪🇹', currency: 'ETB' },
-    { code: 'KE', name: 'Kenya',                emoji: '🇰🇪', currency: 'KES' },
-    { code: 'MG', name: 'Madagascar',           emoji: '🇲🇬', currency: 'MGA' },
-    { code: 'MW', name: 'Malawi',               emoji: '🇲🇼', currency: 'MWK' },
-    { code: 'MU', name: 'Maurice',              emoji: '🇲🇺', currency: 'MUR' },
-    { code: 'MZ', name: 'Mozambique',           emoji: '🇲🇿', currency: 'MZN' },
-    { code: 'RW', name: 'Rwanda',               emoji: '🇷🇼', currency: 'RWF' },
-    { code: 'SC', name: 'Seychelles',           emoji: '🇸🇨', currency: 'SCR' },
-    { code: 'SO', name: 'Somalie',              emoji: '🇸🇴', currency: 'SOS' },
-    { code: 'SS', name: 'Soudan du Sud',        emoji: '🇸🇸', currency: 'SSP' },
-    { code: 'TZ', name: 'Tanzanie',             emoji: '🇹🇿', currency: 'TZS' },
-    { code: 'UG', name: 'Ouganda',              emoji: '🇺🇬', currency: 'UGX' },
-    { code: 'ZM', name: 'Zambie',               emoji: '🇿🇲', currency: 'ZMW' },
-    { code: 'ZW', name: 'Zimbabwe',             emoji: '🇿🇼', currency: 'ZWL' },
+    { code: 'BI', name: 'Burundi',                 emoji: '🇧🇮', currency: 'BIF' },
+    { code: 'KM', name: 'Comores',                 emoji: '🇰🇲', currency: 'KMF' },
+    { code: 'DJ', name: 'Djibouti',                emoji: '🇩🇯', currency: 'DJF' },
+    { code: 'ER', name: 'Érythrée',                emoji: '🇪🇷', currency: 'ERN' },
+    { code: 'ET', name: 'Éthiopie',                emoji: '🇪🇹', currency: 'ETB' },
+    { code: 'KE', name: 'Kenya',                   emoji: '🇰🇪', currency: 'KES' },
+    { code: 'MG', name: 'Madagascar',              emoji: '🇲🇬', currency: 'MGA' },
+    { code: 'MW', name: 'Malawi',                  emoji: '🇲🇼', currency: 'MWK' },
+    { code: 'MU', name: 'Maurice',                 emoji: '🇲🇺', currency: 'MUR' },
+    { code: 'MZ', name: 'Mozambique',              emoji: '🇲🇿', currency: 'MZN' },
+    { code: 'RW', name: 'Rwanda',                  emoji: '🇷🇼', currency: 'RWF' },
+    { code: 'SC', name: 'Seychelles',              emoji: '🇸🇨', currency: 'SCR' },
+    { code: 'SO', name: 'Somalie',                 emoji: '🇸🇴', currency: 'SOS' },
+    { code: 'SS', name: 'Soudan du Sud',           emoji: '🇸🇸', currency: 'SSP' },
+    { code: 'TZ', name: 'Tanzanie',                emoji: '🇹🇿', currency: 'TZS' },
+    { code: 'UG', name: 'Ouganda',                 emoji: '🇺🇬', currency: 'UGX' },
+    { code: 'ZM', name: 'Zambie',                  emoji: '🇿🇲', currency: 'ZMW' },
+    { code: 'ZW', name: 'Zimbabwe',                emoji: '🇿🇼', currency: 'ZWG' },
     // Afrique du Nord
-    { code: 'DZ', name: 'Algérie',              emoji: '🇩🇿', currency: 'DZD' },
-    { code: 'EG', name: 'Égypte',               emoji: '🇪🇬', currency: 'EGP' },
-    { code: 'LY', name: 'Libye',                emoji: '🇱🇾', currency: 'LYD' },
-    { code: 'MA', name: 'Maroc',                emoji: '🇲🇦', currency: 'MAD' },
-    { code: 'SD', name: 'Soudan',               emoji: '🇸🇩', currency: 'SDG' },
-    { code: 'TN', name: 'Tunisie',              emoji: '🇹🇳', currency: 'TND' },
+    { code: 'DZ', name: 'Algérie',                 emoji: '🇩🇿', currency: 'DZD' },
+    { code: 'EG', name: 'Égypte',                  emoji: '🇪🇬', currency: 'EGP' },
+    { code: 'LY', name: 'Libye',                   emoji: '🇱🇾', currency: 'LYD' },
+    { code: 'MA', name: 'Maroc',                   emoji: '🇲🇦', currency: 'MAD' },
+    { code: 'SD', name: 'Soudan',                  emoji: '🇸🇩', currency: 'SDG' },
+    { code: 'TN', name: 'Tunisie',                 emoji: '🇹🇳', currency: 'TND' },
     // Afrique Australe
-    { code: 'BW', name: 'Botswana',             emoji: '🇧🇼', currency: 'BWP' },
-    { code: 'LS', name: 'Lesotho',              emoji: '🇱🇸', currency: 'LSL' },
-    { code: 'NA', name: 'Namibie',              emoji: '🇳🇦', currency: 'NAD' },
-    { code: 'ZA', name: 'Afrique du Sud',       emoji: '🇿🇦', currency: 'ZAR' },
-    { code: 'SZ', name: 'Eswatini',             emoji: '🇸🇿', currency: 'SZL' },
-    // Europe (diaspora)
-    { code: 'BE', name: 'Belgique',             emoji: '🇧🇪', currency: 'EUR' },
-    { code: 'CH', name: 'Suisse',               emoji: '🇨🇭', currency: 'CHF' },
-    { code: 'DE', name: 'Allemagne',            emoji: '🇩🇪', currency: 'EUR' },
-    { code: 'ES', name: 'Espagne',              emoji: '🇪🇸', currency: 'EUR' },
-    { code: 'FR', name: 'France',               emoji: '🇫🇷', currency: 'EUR' },
-    { code: 'GB', name: 'Royaume-Uni',          emoji: '🇬🇧', currency: 'GBP' },
-    { code: 'IT', name: 'Italie',               emoji: '🇮🇹', currency: 'EUR' },
-    { code: 'NL', name: 'Pays-Bas',             emoji: '🇳🇱', currency: 'EUR' },
-    { code: 'PT', name: 'Portugal',             emoji: '🇵🇹', currency: 'EUR' },
-    // Amériques (diaspora)
-    { code: 'BR', name: 'Brésil',               emoji: '🇧🇷', currency: 'BRL' },
-    { code: 'CA', name: 'Canada',               emoji: '🇨🇦', currency: 'CAD' },
-    { code: 'US', name: 'États-Unis',           emoji: '🇺🇸', currency: 'USD' },
+    { code: 'BW', name: 'Botswana',                emoji: '🇧🇼', currency: 'BWP' },
+    { code: 'LS', name: 'Lesotho',                 emoji: '🇱🇸', currency: 'LSL' },
+    { code: 'NA', name: 'Namibie',                 emoji: '🇳🇦', currency: 'NAD' },
+    { code: 'ZA', name: 'Afrique du Sud',          emoji: '🇿🇦', currency: 'ZAR' },
+    { code: 'SZ', name: 'Eswatini',                emoji: '🇸🇿', currency: 'SZL' },
+    // Moyen-Orient (diaspora africaine)
+    { code: 'AE', name: 'Émirats arabes unis',     emoji: '🇦🇪', currency: 'AED' },
+    { code: 'BH', name: 'Bahreïn',                 emoji: '🇧🇭', currency: 'BHD' },
+    { code: 'IQ', name: 'Irak',                    emoji: '🇮🇶', currency: 'IQD' },
+    { code: 'JO', name: 'Jordanie',                emoji: '🇯🇴', currency: 'JOD' },
+    { code: 'KW', name: 'Koweït',                  emoji: '🇰🇼', currency: 'KWD' },
+    { code: 'LB', name: 'Liban',                   emoji: '🇱🇧', currency: 'LBP' },
+    { code: 'OM', name: 'Oman',                    emoji: '🇴🇲', currency: 'OMR' },
+    { code: 'QA', name: 'Qatar',                   emoji: '🇶🇦', currency: 'QAR' },
+    { code: 'SA', name: 'Arabie saoudite',         emoji: '🇸🇦', currency: 'SAR' },
+    // Europe
+    { code: 'AT', name: 'Autriche',                emoji: '🇦🇹', currency: 'EUR' },
+    { code: 'BE', name: 'Belgique',                emoji: '🇧🇪', currency: 'EUR' },
+    { code: 'CH', name: 'Suisse',                  emoji: '🇨🇭', currency: 'CHF' },
+    { code: 'DE', name: 'Allemagne',               emoji: '🇩🇪', currency: 'EUR' },
+    { code: 'DK', name: 'Danemark',                emoji: '🇩🇰', currency: 'DKK' },
+    { code: 'ES', name: 'Espagne',                 emoji: '🇪🇸', currency: 'EUR' },
+    { code: 'FI', name: 'Finlande',                emoji: '🇫🇮', currency: 'EUR' },
+    { code: 'FR', name: 'France',                  emoji: '🇫🇷', currency: 'EUR' },
+    { code: 'GB', name: 'Royaume-Uni',             emoji: '🇬🇧', currency: 'GBP' },
+    { code: 'IE', name: 'Irlande',                 emoji: '🇮🇪', currency: 'EUR' },
+    { code: 'IT', name: 'Italie',                  emoji: '🇮🇹', currency: 'EUR' },
+    { code: 'LU', name: 'Luxembourg',              emoji: '🇱🇺', currency: 'EUR' },
+    { code: 'NL', name: 'Pays-Bas',                emoji: '🇳🇱', currency: 'EUR' },
+    { code: 'NO', name: 'Norvège',                 emoji: '🇳🇴', currency: 'NOK' },
+    { code: 'PT', name: 'Portugal',                emoji: '🇵🇹', currency: 'EUR' },
+    { code: 'SE', name: 'Suède',                   emoji: '🇸🇪', currency: 'SEK' },
+    // Amériques
+    { code: 'BR', name: 'Brésil',                  emoji: '🇧🇷', currency: 'BRL' },
+    { code: 'CA', name: 'Canada',                  emoji: '🇨🇦', currency: 'CAD' },
+    { code: 'HT', name: 'Haïti',                   emoji: '🇭🇹', currency: 'HTG' },
+    { code: 'US', name: 'États-Unis',              emoji: '🇺🇸', currency: 'USD' },
+    // Océanie
+    { code: 'AU', name: 'Australie',               emoji: '🇦🇺', currency: 'AUD' },
   ];
 
   async getCountries() {
@@ -1670,12 +1690,78 @@ export class AdminService {
 
   // ─── DEVISES ──────────────────────────────
   private readonly DEFAULT_CURRENCIES = [
-    { fromCurrency: 'EUR', toCurrency: 'XOF', rate: 655.957 },
-    { fromCurrency: 'USD', toCurrency: 'XOF', rate: 610.0   },
-    { fromCurrency: 'GBP', toCurrency: 'XOF', rate: 780.0   },
-    { fromCurrency: 'GHS', toCurrency: 'XOF', rate: 42.0    },
-    { fromCurrency: 'NGN', toCurrency: 'XOF', rate: 0.38    },
-    { fromCurrency: 'XAF', toCurrency: 'XOF', rate: 1.0     },
+    // Taux de référence vers XOF — à mettre à jour régulièrement via l'interface
+    // Zone franc CFA
+    { fromCurrency: 'XAF', toCurrency: 'XOF', rate: 1.0      }, // parité fixe BCEAO/BEAC
+    { fromCurrency: 'CVE', toCurrency: 'XOF', rate: 5.96     }, // Cap-Vert (indexé EUR)
+    { fromCurrency: 'KMF', toCurrency: 'XOF', rate: 1.33     }, // Comores (indexé EUR)
+    // Grandes devises mondiales
+    { fromCurrency: 'EUR', toCurrency: 'XOF', rate: 655.957  }, // taux fixe légal
+    { fromCurrency: 'USD', toCurrency: 'XOF', rate: 620.0    },
+    { fromCurrency: 'GBP', toCurrency: 'XOF', rate: 785.0    },
+    { fromCurrency: 'CHF', toCurrency: 'XOF', rate: 692.0    },
+    { fromCurrency: 'CAD', toCurrency: 'XOF', rate: 456.0    },
+    { fromCurrency: 'AUD', toCurrency: 'XOF', rate: 400.0    },
+    // Afrique de l'Ouest
+    { fromCurrency: 'GHS', toCurrency: 'XOF', rate: 38.0     }, // Ghana cedi
+    { fromCurrency: 'NGN', toCurrency: 'XOF', rate: 0.38     }, // Naira
+    { fromCurrency: 'GMD', toCurrency: 'XOF', rate: 9.5      }, // Dalasi
+    { fromCurrency: 'GNF', toCurrency: 'XOF', rate: 0.071    }, // Franc guinéen
+    { fromCurrency: 'LRD', toCurrency: 'XOF', rate: 3.1      }, // Dollar libérien
+    { fromCurrency: 'MRU', toCurrency: 'XOF', rate: 15.5     }, // Ouguiya
+    { fromCurrency: 'SLE', toCurrency: 'XOF', rate: 27.0     }, // Leone (new, 2022)
+    // Afrique Centrale
+    { fromCurrency: 'AOA', toCurrency: 'XOF', rate: 0.68     }, // Kwanza
+    { fromCurrency: 'CDF', toCurrency: 'XOF', rate: 0.21     }, // Franc congolais
+    { fromCurrency: 'STN', toCurrency: 'XOF', rate: 26.0     }, // Dobra
+    // Afrique de l'Est
+    { fromCurrency: 'BIF', toCurrency: 'XOF', rate: 0.21     }, // Franc burundais
+    { fromCurrency: 'DJF', toCurrency: 'XOF', rate: 3.5      }, // Franc djiboutien
+    { fromCurrency: 'ERN', toCurrency: 'XOF', rate: 41.0     }, // Nakfa
+    { fromCurrency: 'ETB', toCurrency: 'XOF', rate: 10.5     }, // Birr
+    { fromCurrency: 'KES', toCurrency: 'XOF', rate: 4.5      }, // Shilling kenyan
+    { fromCurrency: 'MGA', toCurrency: 'XOF', rate: 0.13     }, // Ariary
+    { fromCurrency: 'MUR', toCurrency: 'XOF', rate: 13.5     }, // Roupie mauricienne
+    { fromCurrency: 'MWK', toCurrency: 'XOF', rate: 0.36     }, // Kwacha malawien
+    { fromCurrency: 'MZN', toCurrency: 'XOF', rate: 9.5      }, // Metical
+    { fromCurrency: 'RWF', toCurrency: 'XOF', rate: 0.55     }, // Franc rwandais
+    { fromCurrency: 'SCR', toCurrency: 'XOF', rate: 42.0     }, // Roupie seychelloise
+    { fromCurrency: 'SOS', toCurrency: 'XOF', rate: 1.08     }, // Shilling somalien
+    { fromCurrency: 'SSP', toCurrency: 'XOF', rate: 0.47     }, // Livre sud-soudanaise
+    { fromCurrency: 'TZS', toCurrency: 'XOF', rate: 0.24     }, // Shilling tanzanien
+    { fromCurrency: 'UGX', toCurrency: 'XOF', rate: 0.17     }, // Shilling ougandais
+    { fromCurrency: 'ZMW', toCurrency: 'XOF', rate: 22.0     }, // Kwacha zambien
+    { fromCurrency: 'ZWG', toCurrency: 'XOF', rate: 7.5      }, // Zimbabwe Gold (2024)
+    // Afrique du Nord
+    { fromCurrency: 'DZD', toCurrency: 'XOF', rate: 4.6      }, // Dinar algérien
+    { fromCurrency: 'EGP', toCurrency: 'XOF', rate: 13.0     }, // Livre égyptienne
+    { fromCurrency: 'LYD', toCurrency: 'XOF', rate: 128.0    }, // Dinar libyen
+    { fromCurrency: 'MAD', toCurrency: 'XOF', rate: 60.0     }, // Dirham marocain
+    { fromCurrency: 'SDG', toCurrency: 'XOF', rate: 1.0      }, // Livre soudanaise
+    { fromCurrency: 'TND', toCurrency: 'XOF', rate: 196.0    }, // Dinar tunisien
+    // Afrique Australe
+    { fromCurrency: 'BWP', toCurrency: 'XOF', rate: 45.0     }, // Pula
+    { fromCurrency: 'LSL', toCurrency: 'XOF', rate: 33.0     }, // Loti (= ZAR)
+    { fromCurrency: 'NAD', toCurrency: 'XOF', rate: 33.0     }, // Dollar namibien (= ZAR)
+    { fromCurrency: 'SZL', toCurrency: 'XOF', rate: 33.0     }, // Lilangeni (= ZAR)
+    { fromCurrency: 'ZAR', toCurrency: 'XOF', rate: 33.0     }, // Rand sud-africain
+    // Moyen-Orient
+    { fromCurrency: 'AED', toCurrency: 'XOF', rate: 168.0    }, // Dirham émirati
+    { fromCurrency: 'BHD', toCurrency: 'XOF', rate: 1644.0   }, // Dinar bahreïni
+    { fromCurrency: 'IQD', toCurrency: 'XOF', rate: 0.47     }, // Dinar irakien
+    { fromCurrency: 'JOD', toCurrency: 'XOF', rate: 875.0    }, // Dinar jordanien
+    { fromCurrency: 'KWD', toCurrency: 'XOF', rate: 2020.0   }, // Dinar koweïtien
+    { fromCurrency: 'LBP', toCurrency: 'XOF', rate: 0.007    }, // Livre libanaise
+    { fromCurrency: 'OMR', toCurrency: 'XOF', rate: 1610.0   }, // Rial omanais
+    { fromCurrency: 'QAR', toCurrency: 'XOF', rate: 170.0    }, // Riyal qatari
+    { fromCurrency: 'SAR', toCurrency: 'XOF', rate: 165.0    }, // Riyal saoudien
+    // Europe (hors EUR)
+    { fromCurrency: 'DKK', toCurrency: 'XOF', rate: 88.0     }, // Couronne danoise
+    { fromCurrency: 'NOK', toCurrency: 'XOF', rate: 56.0     }, // Couronne norvégienne
+    { fromCurrency: 'SEK', toCurrency: 'XOF', rate: 57.0     }, // Couronne suédoise
+    // Amériques
+    { fromCurrency: 'BRL', toCurrency: 'XOF', rate: 110.0    }, // Real brésilien
+    { fromCurrency: 'HTG', toCurrency: 'XOF', rate: 4.6      }, // Gourde haïtienne
   ];
 
   async getCurrencies() {
