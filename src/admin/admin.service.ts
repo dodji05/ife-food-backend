@@ -1003,6 +1003,14 @@ export class AdminService {
     const professional = raw.professional ?? (raw.type ? { type: raw.type, value: raw.value } : { type: 'PERCENTAGE', value: 15 });
     const driver   = raw.driver   ?? { type: 'PERCENTAGE', value: 10 };
     const countries = raw.countries ?? {};
+    const defaultTiers = () => [
+      { rate: null, fixedAmount: null },
+      { rate: null, fixedAmount: null },
+      { rate: null, fixedAmount: null },
+      { rate: null, fixedAmount: null },
+    ];
+    if (!professional.tiers) professional.tiers = defaultTiers();
+    if (!driver.tiers)       driver.tiers       = defaultTiers();
     return { data: { professional, driver, countries } };
   }
 
