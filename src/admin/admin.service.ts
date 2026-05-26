@@ -8,17 +8,27 @@ export class AdminService {
   constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
 
   // ─── DASHBOARD ────────────────────────────
-  async getDashboard(period: string = 'week', country?: string, city?: string) {
+  async getDashboard(period: string = 'week', country?: string, city?: string, from?: string, to?: string) {
     const now = new Date();
-    const periodMap: Record<string, Date> = {
-      day: new Date(now.getTime() - 24 * 60 * 60 * 1000),
-      week: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-      month: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-    };
-    const since = periodMap[period] ?? periodMap.week;
-    const geoFilter = country ? { deliveryCountry: country } : {};
-    const cityFilter = city ? { deliveryCity: city } : {};
-    const baseWhere = { createdAt: { gte: since }, ...geoFilter, ...cityFilter };
+    let since: Date;
+    let until: Date | undefined;
+
+    if (period === 'custom' && from) {
+      since = new Date(from);
+      until = to ? new Date(to + 'T23:59:59.999Z') : now;
+    } else {
+      const periodMap: Record<string, Date> = {
+        day:   new Date(now.getTime() - 24 * 60 * 60 * 1000),
+        week:  new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+        month: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+      };
+      since = periodMap[period] ?? periodMap.week;
+    }
+
+    const geoFilter  = country ? { deliveryCountry: country } : {};
+    const cityFilter = city    ? { deliveryCity: city }       : {};
+    const dateFilter = { gte: since, ...(until ? { lte: until } : {}) };
+    const baseWhere  = { createdAt: dateFilter, ...geoFilter, ...cityFilter };
 
     // Statuses en cours = entre PAID et IN_DELIVERY exclus
     const inProgressStatuses = ['ACCEPTED', 'IN_PREPARATION', 'READY_FOR_PICKUP', 'DRIVER_ASSIGNED', 'PICKED_UP', 'IN_DELIVERY'] as const;
@@ -147,24 +157,44 @@ export class AdminService {
     // _ used to silence "unused var" lints — kept for future per-driver earnings breakdown
     void topDriverEarnings;
 
-    const bucketCount = period === 'month' ? 30 : period === 'day' ? 1 : 7;
-    const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const buckets = new Map<string, { revenue: number; orders: number }>();
-    for (let i = bucketCount - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      buckets.set(fmt(d), { revenue: 0, orders: 0 });
+    let chartData: { day: string; revenue: number; orders: number }[];
+
+    if (period === 'day') {
+      // Tranches horaires sur 24h
+      const hourBuckets = new Map<string, { revenue: number; orders: number }>();
+      for (let h = 0; h < 24; h++) {
+        hourBuckets.set(`${String(h).padStart(2, '0')}h`, { revenue: 0, orders: 0 });
+      }
+      for (const o of rawOrders) {
+        const h = new Date(o.createdAt).getHours();
+        const key = `${String(h).padStart(2, '0')}h`;
+        const b = hourBuckets.get(key);
+        if (b) { b.revenue += Number(o.totalAmount ?? 0); b.orders++; }
+      }
+      chartData = Array.from(hourBuckets.entries()).map(([day, v]) => ({ day, ...v }));
+    } else {
+      const effectiveEnd = until ?? now;
+      const daysDiff = Math.ceil((effectiveEnd.getTime() - since.getTime()) / (24 * 60 * 60 * 1000));
+      const bucketCount = Math.min(Math.max(daysDiff, 1), 90);
+      const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const buckets = new Map<string, { revenue: number; orders: number }>();
+      for (let i = bucketCount - 1; i >= 0; i--) {
+        const d = new Date(effectiveEnd);
+        d.setDate(d.getDate() - i);
+        buckets.set(fmt(d), { revenue: 0, orders: 0 });
+      }
+      for (const o of rawOrders) {
+        const key = fmt(new Date(o.createdAt));
+        const b = buckets.get(key);
+        if (b) { b.revenue += Number(o.totalAmount ?? 0); b.orders++; }
+      }
+      chartData = Array.from(buckets.entries()).map(([day, v]) => ({ day, ...v }));
     }
-    for (const o of rawOrders) {
-      const key = fmt(new Date(o.createdAt));
-      const b = buckets.get(key);
-      if (b) { b.revenue += Number(o.totalAmount ?? 0); b.orders++; }
-    }
-    const chartData = Array.from(buckets.entries()).map(([day, v]) => ({ day, ...v }));
 
     const cancelRatePercent = orders._count > 0 ? (cancelRate / orders._count * 100).toFixed(1) : 0;
 
-    const prevSince = new Date(since.getTime() - (now.getTime() - since.getTime()));
+    const effectiveEnd = until ?? now;
+    const prevSince = new Date(since.getTime() - (effectiveEnd.getTime() - since.getTime()));
     const [prevOrders, prevRevenue, prevUsers] = await Promise.all([
       this.prisma.order.aggregate({ where: { createdAt: { gte: prevSince, lt: since }, ...geoFilter }, _count: true, _sum: { totalAmount: true } }),
       this.prisma.transaction.aggregate({ where: { type: 'COMMISSION', createdAt: { gte: prevSince, lt: since } }, _sum: { amount: true } }),

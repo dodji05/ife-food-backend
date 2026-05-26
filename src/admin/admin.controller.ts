@@ -23,8 +23,10 @@ export class AdminController {
     @Query('period') period: string,
     @Query('country') country?: string,
     @Query('city') city?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    return this.adminService.getDashboard(period, country, city);
+    return this.adminService.getDashboard(period, country, city, from, to);
   }
 
   // ANALYTICS
