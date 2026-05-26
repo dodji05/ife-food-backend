@@ -1,11 +1,16 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+    private uploads: UploadsService,
+  ) {}
 
   // ─── DASHBOARD ────────────────────────────
   async getDashboard(period: string = 'week', country?: string, city?: string, from?: string, to?: string) {
@@ -593,6 +598,12 @@ export class AdminService {
     const p = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!p) throw new NotFoundException();
     return this.prisma.product.update({ where: { id: productId }, data: { isAvailable: !p.isAvailable } });
+  }
+
+  async uploadCatalogueImage(file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Fichier requis');
+    const url = await this.uploads.uploadFile(file, 'ife-food/products');
+    return { data: { url } };
   }
 
   // ─── DRIVER DETAIL + MISSIONS ────────────

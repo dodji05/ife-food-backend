@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Patch, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Put, Delete, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -292,6 +294,12 @@ export class AdminController {
   @Patch('catalogue/products/:id/toggle')
   toggleCatalogueProduct(@Param('id') id: string) {
     return this.adminService.toggleCatalogueProduct(id);
+  }
+
+  @Post('catalogue/upload-image')
+  @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
+  uploadCatalogueImage(@UploadedFile() file: Express.Multer.File) {
+    return this.adminService.uploadCatalogueImage(file);
   }
 
   // PROMO CODES
