@@ -614,6 +614,7 @@ export class AdminService {
         include: {
           user: { select: { id: true, name: true, firstName: true, phone: true, email: true, status: true, countryCode: true, createdAt: true, createdByAdmin: true, lastLoginAt: true } },
           documents: true,
+          selectedZones: { include: { deliveryZone: true } },
         },
       }),
       this.prisma.transaction.aggregate({
@@ -801,7 +802,10 @@ export class AdminService {
     const [drivers, total] = await Promise.all([
       this.prisma.driver.findMany({
         where,
-        include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
+        include: {
+          user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } },
+          selectedZones: { include: { deliveryZone: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip: pagination?.skip, take: pagination?.limit ?? 200,
       }),
@@ -811,7 +815,7 @@ export class AdminService {
   }
 
   async createDriver(dto: any) {
-    const { phone, name, firstName, email, pin, vehicleType, zoneCity, zoneCountry, licensePlate } = dto;
+    const { phone, name, firstName, email, pin, vehicleType, zoneCity, zoneCountry, licensePlate, deliveryZoneIds } = dto;
     if (!phone) throw new BadRequestException('Le numéro de téléphone est obligatoire.');
     const existing = await this.prisma.user.findUnique({ where: { phone } });
     if (existing) throw new BadRequestException('Ce numéro de téléphone est déjà utilisé.');
@@ -845,17 +849,31 @@ export class AdminService {
         licensePlate: licensePlate || null,
         status: 'PENDING',
       },
-      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
     });
 
-    return { data: driver };
+    if (Array.isArray(deliveryZoneIds) && deliveryZoneIds.length > 0) {
+      await this.prisma.driverDeliveryZone.createMany({
+        data: (deliveryZoneIds as string[]).map(zoneId => ({ driverId: driver.id, deliveryZoneId: zoneId })),
+        skipDuplicates: true,
+      });
+    }
+
+    const fullDriver = await this.prisma.driver.findUnique({
+      where: { id: driver.id },
+      include: {
+        user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } },
+        selectedZones: { include: { deliveryZone: true } },
+      },
+    });
+
+    return { data: fullDriver };
   }
 
   async updateDriver(id: string, dto: any) {
     const driver = await this.prisma.driver.findUnique({ where: { id } });
     if (!driver) throw new NotFoundException('Livreur introuvable.');
 
-    const { name, firstName, email, vehicleType, zoneCity, zoneCountry, licensePlate } = dto;
+    const { name, firstName, email, vehicleType, zoneCity, zoneCountry, licensePlate, deliveryZoneIds } = dto;
 
     if (name || firstName || email) {
       await this.prisma.user.update({
@@ -868,7 +886,7 @@ export class AdminService {
       });
     }
 
-    const updated = await this.prisma.driver.update({
+    await this.prisma.driver.update({
       where: { id },
       data: {
         ...(vehicleType !== undefined  ? { vehicleType }  : {}),
@@ -876,7 +894,24 @@ export class AdminService {
         ...(zoneCountry !== undefined  ? { zoneCountry }  : {}),
         ...(licensePlate !== undefined ? { licensePlate } : {}),
       },
-      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
+    });
+
+    if (Array.isArray(deliveryZoneIds)) {
+      await this.prisma.driverDeliveryZone.deleteMany({ where: { driverId: id } });
+      if (deliveryZoneIds.length > 0) {
+        await this.prisma.driverDeliveryZone.createMany({
+          data: (deliveryZoneIds as string[]).map(zoneId => ({ driverId: id, deliveryZoneId: zoneId })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    const updated = await this.prisma.driver.findUnique({
+      where: { id },
+      include: {
+        user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } },
+        selectedZones: { include: { deliveryZone: true } },
+      },
     });
 
     return { data: updated };
