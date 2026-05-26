@@ -10,14 +10,12 @@ import { Twilio } from 'twilio';
 @Injectable()
 export class OtpService {
   private readonly logger = new Logger(OtpService.name);
-  private twilioClient: Twilio | null = null;
 
-  constructor(private prisma: PrismaService, private config: ConfigService) {
-    const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID');
-    const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
-    if (accountSid && authToken) {
-      this.twilioClient = new Twilio(accountSid, authToken);
-    }
+  constructor(private prisma: PrismaService, private config: ConfigService) {}
+
+  private async loadOtpCreds(): Promise<any> {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'otpCredentials' } });
+    return (cfg?.value as any) ?? {};
   }
 
   /** Generate and send OTP */
@@ -84,9 +82,13 @@ export class OtpService {
 
   private async sendSms(to: string, message: string) {
     try {
-      if (!this.twilioClient) throw new Error('Twilio not configured');
-      const from = this.config.get<string>('TWILIO_PHONE_NUMBER');
-      await this.twilioClient.messages.create({ body: message, from, to });
+      const dbCreds = await this.loadOtpCreds();
+      const accountSid = dbCreds.SMS?.accountSid || this.config.get<string>('TWILIO_ACCOUNT_SID');
+      const authToken  = dbCreds.SMS?.authToken  || this.config.get<string>('TWILIO_AUTH_TOKEN');
+      const from       = dbCreds.SMS?.phoneNumber || this.config.get<string>('TWILIO_PHONE_NUMBER');
+      if (!accountSid || !authToken) throw new Error('Twilio not configured');
+      const client = new Twilio(accountSid, authToken);
+      await client.messages.create({ body: message, from, to });
     } catch (err) {
       this.logger.error('SMS send failed', err);
       throw new BadRequestException('Failed to send OTP via SMS');
@@ -95,10 +97,14 @@ export class OtpService {
 
   private async sendWhatsapp(to: string, message: string) {
     try {
+      const dbCreds    = await this.loadOtpCreds();
+      const apiUrl     = dbCreds.WHATSAPP?.apiUrl     || this.config.get('WHATSAPP_API_URL');
+      const phoneId    = dbCreds.WHATSAPP?.phoneId    || this.config.get('WHATSAPP_PHONE_ID');
+      const token      = dbCreds.WHATSAPP?.accessToken|| this.config.get('WHATSAPP_ACCESS_TOKEN');
       await axios.post(
-        `${this.config.get('WHATSAPP_API_URL')}/${this.config.get('WHATSAPP_PHONE_ID')}/messages`,
+        `${apiUrl}/${phoneId}/messages`,
         { messaging_product: 'whatsapp', to, type: 'text', text: { body: message } },
-        { headers: { Authorization: `Bearer ${this.config.get('WHATSAPP_ACCESS_TOKEN')}` } },
+        { headers: { Authorization: `Bearer ${token}` } },
       );
     } catch (err) {
       this.logger.error('WhatsApp send failed', err);

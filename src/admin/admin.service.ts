@@ -1256,6 +1256,40 @@ export class AdminService {
     return `${value.slice(0, 4)}****${value.slice(-4)}`;
   }
 
+  // ─── OTP CREDENTIALS ──────────────────────
+  async getOtpCredentials() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'otpCredentials' } });
+    const raw = (cfg?.value as any) ?? {};
+    const masked: any = {};
+    for (const [channel, creds] of Object.entries(raw)) {
+      masked[channel] = {};
+      for (const [field, value] of Object.entries(creds as any)) {
+        (masked[channel] as any)[field] = typeof value === 'string' && value
+          ? this.maskSecret(value)
+          : (value ?? '');
+      }
+    }
+    return { data: masked };
+  }
+
+  async setOtpCredentials(credentials: Record<string, Record<string, any>>) {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'otpCredentials' } });
+    const existing: any = (cfg?.value as any) ?? {};
+    const merged: any = {};
+    for (const [channel, creds] of Object.entries(credentials)) {
+      merged[channel] = { ...(existing[channel] ?? {}) };
+      for (const [field, value] of Object.entries(creds)) {
+        if (value !== '__keep__') merged[channel][field] = value;
+      }
+    }
+    await this.prisma.platformConfig.upsert({
+      where: { key: 'otpCredentials' },
+      update: { value: merged },
+      create: { key: 'otpCredentials', value: merged },
+    });
+    return { success: true };
+  }
+
   async getPaymentCredentials() {
     const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentCredentials' } });
     const raw = (cfg?.value as any) ?? {};

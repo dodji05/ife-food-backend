@@ -236,6 +236,16 @@ export class AdminController {
     return this.adminService.setPaymentCredentials(body);
   }
 
+  @Get('config/otp-credentials')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  getOtpCredentials() { return this.adminService.getOtpCredentials(); }
+
+  @Put('config/otp-credentials')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  setOtpCredentials(@Body() body: any) { return this.adminService.setOtpCredentials(body); }
+
   // PAYMENTS
   @Get('payments/stats')
   getPaymentStats() { return this.adminService.getPaymentStats(); }
