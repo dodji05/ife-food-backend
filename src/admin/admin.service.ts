@@ -931,7 +931,8 @@ export class AdminService {
         include: {
           client: { select: { name: true, phone: true } },
           professional: { select: { businessName: true } },
-          driver: { include: { user: { select: { name: true } } } },
+          driver: { include: { user: { select: { name: true, phone: true } } } },
+          items: { include: { product: { select: { name: true } } } },
           payment: true,
         },
         orderBy: { createdAt: 'desc' },
