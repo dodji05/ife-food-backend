@@ -1285,11 +1285,17 @@ export class AdminService {
 
   // ─── PROMO CODES ──────────────────────────
   async getPromoCodes() {
-    return this.prisma.promoCode.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.promoCode.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        professional: { select: { id: true, businessName: true } },
+        product: { select: { id: true, name: true } },
+      },
+    });
   }
 
   async createPromoCode(dto: any) {
-    const { code, type, value, minOrder, maxUses, perUser, expiresAt, countries } = dto;
+    const { code, type, value, minOrder, maxUses, perUser, expiresAt, countries, professionalId, productId } = dto;
     return this.prisma.promoCode.create({
       data: {
         code: String(code).toUpperCase().trim(),
@@ -1300,12 +1306,18 @@ export class AdminService {
         perUser: Boolean(perUser ?? false),
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         countries: Array.isArray(countries) ? countries : [],
+        professionalId: professionalId || null,
+        productId: productId || null,
+      },
+      include: {
+        professional: { select: { id: true, businessName: true } },
+        product: { select: { id: true, name: true } },
       },
     });
   }
 
   async updatePromoCode(id: string, dto: any) {
-    const { code, type, value, minOrder, maxUses, perUser, expiresAt, countries } = dto;
+    const { code, type, value, minOrder, maxUses, perUser, expiresAt, countries, professionalId, productId } = dto;
     return this.prisma.promoCode.update({
       where: { id },
       data: {
@@ -1317,6 +1329,12 @@ export class AdminService {
         ...(perUser !== undefined && { perUser: Boolean(perUser) }),
         ...(expiresAt !== undefined && { expiresAt: expiresAt ? new Date(expiresAt) : null }),
         ...(countries !== undefined && { countries: Array.isArray(countries) ? countries : [] }),
+        ...(professionalId !== undefined && { professionalId: professionalId || null }),
+        ...(productId !== undefined && { productId: productId || null }),
+      },
+      include: {
+        professional: { select: { id: true, businessName: true } },
+        product: { select: { id: true, name: true } },
       },
     });
   }

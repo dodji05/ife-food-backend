@@ -463,6 +463,7 @@ model Product {
   professional   Professional     @relation(fields: [professionalId], references: [id])
   category       ProductCategory? @relation(fields: [categoryId], references: [id])
   orderItems     OrderItem[]
+  promoCodes     PromoCode[]
 
   @@index([professionalId])
   @@index([categoryId])
@@ -656,8 +657,11 @@ model PromoCode {
   createdAt      DateTime      @default(now())
   professionalId String?
   professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  productId      String?
+  product        Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([professionalId])
+  @@index([productId])
   @@map("promo_codes")
 }
 
