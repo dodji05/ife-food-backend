@@ -27,7 +27,6 @@ export class FedapayService {
     const payBaseUrl = sandbox ? 'https://sandbox-pay.fedapay.com' : 'https://pay.fedapay.com';
     const secretKey = overrideConfig?.secretKey || this.config.get<string>('FEDAPAY_SECRET_KEY', '');
     const callbackUrl = overrideConfig?.callbackUrl ?? this.config.get<string>('FEDAPAY_CALLBACK_URL', '');
-    console.log(`[FedaPay] sandbox=${sandbox} | url=${apiBaseUrl} | key_prefix=${secretKey?.substring(0, 15) || '(vide)'}`);
     const headers = { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' };
 
     const nameParts = (customer.name ?? 'Client IFE').trim().split(/\s+/);
@@ -67,9 +66,9 @@ export class FedapayService {
       { headers },
     );
 
-    console.log('[FedaPay] token response:', JSON.stringify(tokenData).substring(0, 200));
-    const token: string = tokenData?.token ?? tokenData?.['v1/token']?.token ?? tokenData?.['token'];
-    const checkoutUrl = `${payBaseUrl}/${token}`;
+    const token: string = tokenData?.token ?? tokenData?.['v1/token']?.token;
+    // FedaPay retourne l'URL complète dans tokenData.url — on l'utilise en priorité.
+    const checkoutUrl = tokenData?.url ?? `${payBaseUrl}/${token}`;
 
     return {
       id: `fedapay_${transactionId}`,
