@@ -79,6 +79,24 @@ export class FedapayService {
   }
 
   /**
+   * Interroge directement l'API FedaPay pour connaître le statut d'une transaction.
+   * Retourne la valeur brute du champ `status` : pending | approved | declined | canceled | transferred.
+   */
+  async checkTransactionStatus(
+    transactionId: number,
+    overrideConfig?: { secretKey?: string; sandbox?: boolean },
+  ): Promise<string> {
+    const sandbox = overrideConfig?.sandbox !== undefined ? overrideConfig.sandbox : this.sandbox;
+    const apiBaseUrl = sandbox ? 'https://sandbox-api.fedapay.com/v1' : 'https://api.fedapay.com/v1';
+    const secretKey = overrideConfig?.secretKey || this.config.get<string>('FEDAPAY_SECRET_KEY', '');
+    const headers = { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' };
+
+    const { data } = await axios.get(`${apiBaseUrl}/transactions/${transactionId}`, { headers });
+    const tx = data?.['v1/transaction'] ?? data?.transaction ?? data;
+    return (tx?.status ?? 'pending') as string;
+  }
+
+  /**
    * Vérifie la signature HMAC-SHA256 du webhook FedaPay.
    * Retourne true si FEDAPAY_WEBHOOK_SECRET n'est pas configuré (mode dev).
    */

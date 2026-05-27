@@ -229,6 +229,39 @@ export class PaymentsService {
     ]);
   }
 
+  /**
+   * Interroge FedaPay directement pour vérifier si la transaction est approuvée.
+   * Utilisé par le client quand le webhook est absent/lent.
+   */
+  async checkFedapayPayment(orderId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { orderId } });
+    if (!payment || (payment.gateway as string) !== 'FEDAPAY') {
+      throw new BadRequestException('Aucun paiement FedaPay trouvé pour cette commande');
+    }
+    if ((payment.status as string) === 'SUCCESS') {
+      return { data: { status: 'SUCCESS', alreadyConfirmed: true } };
+    }
+
+    const rawId = payment.gatewayRef?.replace('fedapay_', '');
+    const transactionId = rawId ? Number(rawId) : NaN;
+    if (!rawId || isNaN(transactionId)) {
+      throw new BadRequestException('ID de transaction FedaPay introuvable');
+    }
+
+    const dbCreds = await this.loadGatewayCredentials();
+    const status = await this.fedapay.checkTransactionStatus(transactionId, dbCreds.FEDAPAY);
+
+    if (status === 'approved' || status === 'transferred') {
+      await this.confirmPayment(orderId, payment.gatewayRef);
+      return { data: { status: 'SUCCESS' } };
+    }
+    if (status === 'declined' || status === 'canceled') {
+      await this.failPayment(orderId);
+      return { data: { status: 'FAILED' } };
+    }
+    return { data: { status: 'PENDING' } };
+  }
+
   async failPayment(orderId: string) {
     await this.prisma.payment.update({ where: { orderId }, data: { status: 'FAILED' as any } });
   }

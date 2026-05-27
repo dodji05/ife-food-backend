@@ -35,6 +35,14 @@ export class PaymentsController {
     return this.paymentsService.handleWebhook(gateway, parsedBody, rawBody, sig);
   }
 
+  @Post(':orderId/check-fedapay')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Manually check FedaPay transaction status and confirm if approved' })
+  checkFedapay(@Param('orderId') orderId: string) {
+    return this.paymentsService.checkFedapayPayment(orderId);
+  }
+
   @Get('gateways')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
