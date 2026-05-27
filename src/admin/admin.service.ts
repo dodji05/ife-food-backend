@@ -1870,7 +1870,7 @@ export class AdminService {
     { fromCurrency: 'GNF', toCurrency: 'XOF', rate: 0.071    }, // Franc guinéen
     { fromCurrency: 'LRD', toCurrency: 'XOF', rate: 3.1      }, // Dollar libérien
     { fromCurrency: 'MRU', toCurrency: 'XOF', rate: 15.5     }, // Ouguiya
-    { fromCurrency: 'SLE', toCurrency: 'XOF', rate: 27.0     }, // Leone (new, 2022)
+    { fromCurrency: 'SLE', toCurrency: 'XOF', rate: 27.0     }, // Leone
     // Afrique Centrale
     { fromCurrency: 'AOA', toCurrency: 'XOF', rate: 0.68     }, // Kwanza
     { fromCurrency: 'CDF', toCurrency: 'XOF', rate: 0.21     }, // Franc congolais
@@ -1892,7 +1892,7 @@ export class AdminService {
     { fromCurrency: 'TZS', toCurrency: 'XOF', rate: 0.24     }, // Shilling tanzanien
     { fromCurrency: 'UGX', toCurrency: 'XOF', rate: 0.17     }, // Shilling ougandais
     { fromCurrency: 'ZMW', toCurrency: 'XOF', rate: 22.0     }, // Kwacha zambien
-    { fromCurrency: 'ZWG', toCurrency: 'XOF', rate: 7.5      }, // Zimbabwe Gold (2024)
+    { fromCurrency: 'ZWG', toCurrency: 'XOF', rate: 7.5      }, // Zimbabwe Gold
     // Afrique du Nord
     { fromCurrency: 'DZD', toCurrency: 'XOF', rate: 4.6      }, // Dinar algérien
     { fromCurrency: 'EGP', toCurrency: 'XOF', rate: 13.0     }, // Livre égyptienne
@@ -1902,35 +1902,123 @@ export class AdminService {
     { fromCurrency: 'TND', toCurrency: 'XOF', rate: 196.0    }, // Dinar tunisien
     // Afrique Australe
     { fromCurrency: 'BWP', toCurrency: 'XOF', rate: 45.0     }, // Pula
-    { fromCurrency: 'LSL', toCurrency: 'XOF', rate: 33.0     }, // Loti (= ZAR)
-    { fromCurrency: 'NAD', toCurrency: 'XOF', rate: 33.0     }, // Dollar namibien (= ZAR)
-    { fromCurrency: 'SZL', toCurrency: 'XOF', rate: 33.0     }, // Lilangeni (= ZAR)
+    { fromCurrency: 'LSL', toCurrency: 'XOF', rate: 33.0     }, // Loti
+    { fromCurrency: 'NAD', toCurrency: 'XOF', rate: 33.0     }, // Dollar namibien
+    { fromCurrency: 'SZL', toCurrency: 'XOF', rate: 33.0     }, // Lilangeni
     { fromCurrency: 'ZAR', toCurrency: 'XOF', rate: 33.0     }, // Rand sud-africain
     // Moyen-Orient
     { fromCurrency: 'AED', toCurrency: 'XOF', rate: 168.0    }, // Dirham émirati
     { fromCurrency: 'BHD', toCurrency: 'XOF', rate: 1644.0   }, // Dinar bahreïni
+    { fromCurrency: 'ILS', toCurrency: 'XOF', rate: 167.0    }, // Shekel israélien
     { fromCurrency: 'IQD', toCurrency: 'XOF', rate: 0.47     }, // Dinar irakien
+    { fromCurrency: 'IRR', toCurrency: 'XOF', rate: 0.015    }, // Rial iranien
     { fromCurrency: 'JOD', toCurrency: 'XOF', rate: 875.0    }, // Dinar jordanien
     { fromCurrency: 'KWD', toCurrency: 'XOF', rate: 2020.0   }, // Dinar koweïtien
     { fromCurrency: 'LBP', toCurrency: 'XOF', rate: 0.007    }, // Livre libanaise
     { fromCurrency: 'OMR', toCurrency: 'XOF', rate: 1610.0   }, // Rial omanais
     { fromCurrency: 'QAR', toCurrency: 'XOF', rate: 170.0    }, // Riyal qatari
     { fromCurrency: 'SAR', toCurrency: 'XOF', rate: 165.0    }, // Riyal saoudien
+    { fromCurrency: 'SYP', toCurrency: 'XOF', rate: 0.047    }, // Livre syrienne
+    { fromCurrency: 'YER', toCurrency: 'XOF', rate: 2.5      }, // Rial yéménite
     // Europe (hors EUR)
+    { fromCurrency: 'ALL', toCurrency: 'XOF', rate: 6.2      }, // Lek albanais
+    { fromCurrency: 'AMD', toCurrency: 'XOF', rate: 1.6      }, // Dram arménien
+    { fromCurrency: 'AZN', toCurrency: 'XOF', rate: 365.0    }, // Manat azerbaïdjanais
+    { fromCurrency: 'BAM', toCurrency: 'XOF', rate: 335.0    }, // Mark bosnien
+    { fromCurrency: 'BGN', toCurrency: 'XOF', rate: 335.0    }, // Lev bulgare
+    { fromCurrency: 'BYN', toCurrency: 'XOF', rate: 190.0    }, // Rouble biélorusse
+    { fromCurrency: 'CZK', toCurrency: 'XOF', rate: 26.0     }, // Couronne tchèque
     { fromCurrency: 'DKK', toCurrency: 'XOF', rate: 88.0     }, // Couronne danoise
+    { fromCurrency: 'GEL', toCurrency: 'XOF', rate: 225.0    }, // Lari géorgien
+    { fromCurrency: 'HUF', toCurrency: 'XOF', rate: 1.7      }, // Forint hongrois
+    { fromCurrency: 'ISK', toCurrency: 'XOF', rate: 4.5      }, // Couronne islandaise
+    { fromCurrency: 'MDL', toCurrency: 'XOF', rate: 34.0     }, // Leu moldave
+    { fromCurrency: 'MKD', toCurrency: 'XOF', rate: 10.6     }, // Denar macédonien
     { fromCurrency: 'NOK', toCurrency: 'XOF', rate: 56.0     }, // Couronne norvégienne
+    { fromCurrency: 'PLN', toCurrency: 'XOF', rate: 153.0    }, // Zloty polonais
+    { fromCurrency: 'RON', toCurrency: 'XOF', rate: 132.0    }, // Leu roumain
+    { fromCurrency: 'RSD', toCurrency: 'XOF', rate: 5.6      }, // Dinar serbe
+    { fromCurrency: 'RUB', toCurrency: 'XOF', rate: 6.8      }, // Rouble russe
     { fromCurrency: 'SEK', toCurrency: 'XOF', rate: 57.0     }, // Couronne suédoise
-    // Amériques
-    { fromCurrency: 'BRL', toCurrency: 'XOF', rate: 110.0    }, // Real brésilien
+    { fromCurrency: 'TRY', toCurrency: 'XOF', rate: 18.0     }, // Livre turque
+    { fromCurrency: 'UAH', toCurrency: 'XOF', rate: 15.0     }, // Hryvnia ukrainienne
+    // Asie Centrale
+    { fromCurrency: 'AFN', toCurrency: 'XOF', rate: 9.0      }, // Afghani
+    { fromCurrency: 'KGS', toCurrency: 'XOF', rate: 7.2      }, // Som kirghiz
+    { fromCurrency: 'KZT', toCurrency: 'XOF', rate: 1.3      }, // Tenge kazakh
+    { fromCurrency: 'TJS', toCurrency: 'XOF', rate: 57.0     }, // Somoni tadjik
+    { fromCurrency: 'TMT', toCurrency: 'XOF', rate: 177.0    }, // Manat turkmène
+    { fromCurrency: 'UZS', toCurrency: 'XOF', rate: 0.049    }, // Sum ouzbek
+    // Asie du Sud
+    { fromCurrency: 'BDT', toCurrency: 'XOF', rate: 5.6      }, // Taka bangladais
+    { fromCurrency: 'BTN', toCurrency: 'XOF', rate: 7.4      }, // Ngultrum bhoutanais
+    { fromCurrency: 'INR', toCurrency: 'XOF', rate: 7.4      }, // Roupie indienne
+    { fromCurrency: 'LKR', toCurrency: 'XOF', rate: 1.9      }, // Roupie sri-lankaise
+    { fromCurrency: 'MVR', toCurrency: 'XOF', rate: 40.0     }, // Rufiyaa maldivien
+    { fromCurrency: 'NPR', toCurrency: 'XOF', rate: 4.6      }, // Roupie népalaise
+    { fromCurrency: 'PKR', toCurrency: 'XOF', rate: 2.2      }, // Roupie pakistanaise
+    // Asie de l'Est
+    { fromCurrency: 'CNY', toCurrency: 'XOF', rate: 86.0     }, // Yuan chinois
+    { fromCurrency: 'HKD', toCurrency: 'XOF', rate: 79.0     }, // Dollar de Hong Kong
+    { fromCurrency: 'JPY', toCurrency: 'XOF', rate: 4.1      }, // Yen japonais
+    { fromCurrency: 'KPW', toCurrency: 'XOF', rate: 0.69     }, // Won nord-coréen
+    { fromCurrency: 'KRW', toCurrency: 'XOF', rate: 0.45     }, // Won sud-coréen
+    { fromCurrency: 'MNT', toCurrency: 'XOF', rate: 0.18     }, // Tugrik mongol
+    { fromCurrency: 'MOP', toCurrency: 'XOF', rate: 77.0     }, // Pataca macanais
+    { fromCurrency: 'TWD', toCurrency: 'XOF', rate: 19.5     }, // Dollar taiwanais
+    // Asie du Sud-Est
+    { fromCurrency: 'BND', toCurrency: 'XOF', rate: 464.0    }, // Dollar de Brunéi
+    { fromCurrency: 'IDR', toCurrency: 'XOF', rate: 0.038    }, // Rupiah indonésienne
+    { fromCurrency: 'KHR', toCurrency: 'XOF', rate: 0.15     }, // Riel cambodgien
+    { fromCurrency: 'LAK', toCurrency: 'XOF', rate: 0.029    }, // Kip laotien
+    { fromCurrency: 'MMK', toCurrency: 'XOF', rate: 0.29     }, // Kyat birman
+    { fromCurrency: 'MYR', toCurrency: 'XOF', rate: 133.0    }, // Ringgit malaisien
+    { fromCurrency: 'PHP', toCurrency: 'XOF', rate: 11.0     }, // Peso philippin
+    { fromCurrency: 'SGD', toCurrency: 'XOF', rate: 464.0    }, // Dollar de Singapour
+    { fromCurrency: 'THB', toCurrency: 'XOF', rate: 17.0     }, // Baht thaïlandais
+    { fromCurrency: 'VND', toCurrency: 'XOF', rate: 0.024    }, // Dong vietnamien
+    // Amérique du Nord & Centrale
+    { fromCurrency: 'MXN', toCurrency: 'XOF', rate: 32.0     }, // Peso mexicain
+    { fromCurrency: 'BZD', toCurrency: 'XOF', rate: 307.0    }, // Dollar bélizien
+    { fromCurrency: 'CRC', toCurrency: 'XOF', rate: 1.2      }, // Colon costa-ricain
+    { fromCurrency: 'GTQ', toCurrency: 'XOF', rate: 80.0     }, // Quetzal guatémaltèque
+    { fromCurrency: 'HNL', toCurrency: 'XOF', rate: 25.0     }, // Lempira hondurien
+    { fromCurrency: 'NIO', toCurrency: 'XOF', rate: 17.0     }, // Córdoba nicaraguayen
+    { fromCurrency: 'PAB', toCurrency: 'XOF', rate: 620.0    }, // Balboa panaméen (= USD)
+    // Caraïbes
+    { fromCurrency: 'BBD', toCurrency: 'XOF', rate: 310.0    }, // Dollar barbadien
+    { fromCurrency: 'BSD', toCurrency: 'XOF', rate: 620.0    }, // Dollar bahamien (= USD)
+    { fromCurrency: 'CUP', toCurrency: 'XOF', rate: 26.0     }, // Peso cubain
+    { fromCurrency: 'DOP', toCurrency: 'XOF', rate: 10.5     }, // Peso dominicain
     { fromCurrency: 'HTG', toCurrency: 'XOF', rate: 4.6      }, // Gourde haïtienne
+    { fromCurrency: 'JMD', toCurrency: 'XOF', rate: 4.0      }, // Dollar jamaïcain
+    { fromCurrency: 'TTD', toCurrency: 'XOF', rate: 91.0     }, // Dollar de T&T
+    { fromCurrency: 'XCD', toCurrency: 'XOF', rate: 229.0    }, // Dollar des Caraïbes orientales
+    // Amérique du Sud
+    { fromCurrency: 'ARS', toCurrency: 'XOF', rate: 0.65     }, // Peso argentin
+    { fromCurrency: 'BOB', toCurrency: 'XOF', rate: 90.0     }, // Boliviano
+    { fromCurrency: 'BRL', toCurrency: 'XOF', rate: 110.0    }, // Real brésilien
+    { fromCurrency: 'CLP', toCurrency: 'XOF', rate: 0.62     }, // Peso chilien
+    { fromCurrency: 'COP', toCurrency: 'XOF', rate: 0.15     }, // Peso colombien
+    { fromCurrency: 'GYD', toCurrency: 'XOF', rate: 2.95     }, // Dollar guyanais
+    { fromCurrency: 'PEN', toCurrency: 'XOF', rate: 165.0    }, // Sol péruvien
+    { fromCurrency: 'PYG', toCurrency: 'XOF', rate: 0.083    }, // Guaraní paraguayen
+    { fromCurrency: 'SRD', toCurrency: 'XOF', rate: 17.0     }, // Dollar surinamais
+    { fromCurrency: 'UYU', toCurrency: 'XOF', rate: 15.5     }, // Peso uruguayen
+    { fromCurrency: 'VES', toCurrency: 'XOF', rate: 17.0     }, // Bolívar vénézuélien
+    // Océanie
+    { fromCurrency: 'FJD', toCurrency: 'XOF', rate: 274.0    }, // Dollar fidjien
+    { fromCurrency: 'NZD', toCurrency: 'XOF', rate: 372.0    }, // Dollar néo-zélandais
+    { fromCurrency: 'PGK', toCurrency: 'XOF', rate: 162.0    }, // Kina papouasien
+    { fromCurrency: 'SBD', toCurrency: 'XOF', rate: 73.0     }, // Dollar des Salomon
+    { fromCurrency: 'TOP', toCurrency: 'XOF', rate: 263.0    }, // Pa'anga tonguien
+    { fromCurrency: 'VUV', toCurrency: 'XOF', rate: 5.2      }, // Vatu vanuatuan
+    { fromCurrency: 'WST', toCurrency: 'XOF', rate: 225.0    }, // Tālā samoan
   ];
 
   async getCurrencies() {
-    let rates = await this.prisma.exchangeRate.findMany({ where: { toCurrency: 'XOF' }, orderBy: { fromCurrency: 'asc' } });
-    if (rates.length === 0) {
-      await this.prisma.exchangeRate.createMany({ data: this.DEFAULT_CURRENCIES, skipDuplicates: true });
-      rates = await this.prisma.exchangeRate.findMany({ where: { toCurrency: 'XOF' }, orderBy: { fromCurrency: 'asc' } });
-    }
+    await this.prisma.exchangeRate.createMany({ data: this.DEFAULT_CURRENCIES, skipDuplicates: true });
+    const rates = await this.prisma.exchangeRate.findMany({ where: { toCurrency: 'XOF' }, orderBy: { fromCurrency: 'asc' } });
     return { data: { base: 'XOF', rates } };
   }
 
