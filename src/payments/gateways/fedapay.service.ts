@@ -56,6 +56,7 @@ export class FedapayService {
       { headers },
     );
 
+    console.log('[FedaPay] transaction response:', JSON.stringify(txData).substring(0, 300));
     // L'API FedaPay retourne soit { v1: { transaction: { id } } } soit { transaction: { id } }
     const transactionId: number =
       txData?.v1?.transaction?.id ?? txData?.transaction?.id ?? txData?.id;
