@@ -246,6 +246,16 @@ export class AdminController {
   @AdminLevel('SUPER_ADMIN')
   setOtpCredentials(@Body() body: any) { return this.adminService.setOtpCredentials(body); }
 
+  @Get('config/maps-credentials')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  getMapsCredentials() { return this.adminService.getMapsCredentials(); }
+
+  @Put('config/maps-credentials')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  setMapsCredentials(@Body() body: any) { return this.adminService.setMapsCredentials(body); }
+
   // PAYMENTS
   @Get('payments/stats')
   getPaymentStats() { return this.adminService.getPaymentStats(); }

@@ -1334,6 +1334,49 @@ export class AdminService {
     return { success: true };
   }
 
+  // ─── MAPS / GEO CREDENTIALS ───────────────
+  async getMapsCredentials() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'mapsCredentials' } });
+    const raw = (cfg?.value as any) ?? {};
+    const result: any = { activeProvider: raw.activeProvider ?? 'OPENSTREETMAP' };
+    for (const provider of ['GOOGLE_MAPS', 'OPENSTREETMAP']) {
+      const creds = raw[provider] ?? {};
+      result[provider] = {};
+      for (const [field, value] of Object.entries(creds)) {
+        if (field === 'enabled' || typeof value !== 'string') {
+          (result[provider] as any)[field] = value;
+        } else {
+          (result[provider] as any)[field] = value ? this.maskSecret(value) : '';
+        }
+      }
+    }
+    return { data: result };
+  }
+
+  async setMapsCredentials(credentials: Record<string, any>) {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'mapsCredentials' } });
+    const existing: any = (cfg?.value as any) ?? {};
+    const merged: any = {
+      activeProvider: 'activeProvider' in credentials ? credentials.activeProvider : (existing.activeProvider ?? 'OPENSTREETMAP'),
+    };
+    for (const provider of ['GOOGLE_MAPS', 'OPENSTREETMAP']) {
+      if (credentials[provider]) {
+        merged[provider] = { ...(existing[provider] ?? {}) };
+        for (const [field, value] of Object.entries(credentials[provider])) {
+          if (value !== '__keep__') merged[provider][field] = value;
+        }
+      } else {
+        merged[provider] = existing[provider] ?? {};
+      }
+    }
+    await this.prisma.platformConfig.upsert({
+      where: { key: 'mapsCredentials' },
+      update: { value: merged },
+      create: { key: 'mapsCredentials', value: merged },
+    });
+    return { success: true };
+  }
+
   // ─── PROMO CODES ──────────────────────────
   async getPromoCodes() {
     return this.prisma.promoCode.findMany({
