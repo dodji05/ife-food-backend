@@ -27,6 +27,7 @@ export class FedapayService {
     const payBaseUrl = sandbox ? 'https://sandbox-pay.fedapay.com' : 'https://pay.fedapay.com';
     const secretKey = overrideConfig?.secretKey || this.config.get<string>('FEDAPAY_SECRET_KEY', '');
     const callbackUrl = overrideConfig?.callbackUrl ?? this.config.get<string>('FEDAPAY_CALLBACK_URL', '');
+    console.log(`[FedaPay] sandbox=${sandbox} | url=${apiBaseUrl} | key_prefix=${secretKey?.substring(0, 15) || '(vide)'}`);
     const headers = { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' };
 
     const nameParts = (customer.name ?? 'Client IFE').trim().split(/\s+/);
