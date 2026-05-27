@@ -1338,7 +1338,7 @@ export class AdminService {
   async getMapsCredentials() {
     const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'mapsCredentials' } });
     const raw = (cfg?.value as any) ?? {};
-    const result: any = { activeProvider: raw.activeProvider ?? 'OPENSTREETMAP' };
+    const result: any = { activeProvider: raw.activeProvider ?? 'GOOGLE_MAPS' };
     for (const provider of ['GOOGLE_MAPS', 'OPENSTREETMAP']) {
       const creds = raw[provider] ?? {};
       result[provider] = {};
@@ -1357,7 +1357,7 @@ export class AdminService {
     const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'mapsCredentials' } });
     const existing: any = (cfg?.value as any) ?? {};
     const merged: any = {
-      activeProvider: 'activeProvider' in credentials ? credentials.activeProvider : (existing.activeProvider ?? 'OPENSTREETMAP'),
+      activeProvider: 'activeProvider' in credentials ? credentials.activeProvider : (existing.activeProvider ?? 'GOOGLE_MAPS'),
     };
     for (const provider of ['GOOGLE_MAPS', 'OPENSTREETMAP']) {
       if (credentials[provider]) {
