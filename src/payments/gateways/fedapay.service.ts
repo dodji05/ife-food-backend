@@ -56,10 +56,9 @@ export class FedapayService {
       { headers },
     );
 
-    console.log('[FedaPay] transaction response:', JSON.stringify(txData).substring(0, 300));
-    // L'API FedaPay retourne soit { v1: { transaction: { id } } } soit { transaction: { id } }
+    // FedaPay retourne { "v1/transaction": { id } } — clé avec slash littéral.
     const transactionId: number =
-      txData?.v1?.transaction?.id ?? txData?.transaction?.id ?? txData?.id;
+      txData?.['v1/transaction']?.id ?? txData?.v1?.transaction?.id ?? txData?.transaction?.id ?? txData?.id;
 
     // 2. Obtenir le token de paiement
     const { data: tokenData } = await axios.post(
@@ -68,7 +67,8 @@ export class FedapayService {
       { headers },
     );
 
-    const token: string = tokenData.token;
+    console.log('[FedaPay] token response:', JSON.stringify(tokenData).substring(0, 200));
+    const token: string = tokenData?.token ?? tokenData?.['v1/token']?.token ?? tokenData?.['token'];
     const checkoutUrl = `${payBaseUrl}/${token}`;
 
     return {
