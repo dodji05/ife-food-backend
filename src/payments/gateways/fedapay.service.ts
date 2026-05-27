@@ -38,7 +38,7 @@ export class FedapayService {
       `${apiBaseUrl}/transactions`,
       {
         description: `Commande IFE FOOD – ${orderId}`,
-        amount,
+        amount: Math.round(amount),
         currency: { iso: currency || 'XOF' },
         ...(callbackUrl ? { callback_url: callbackUrl } : {}),
         customer: {

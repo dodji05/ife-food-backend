@@ -143,12 +143,13 @@ export class PaymentsService {
     return { data: paymentData };
   }
 
-  async handleWebhook(gateway: string, payload: any, signature: string) {
+  async handleWebhook(gateway: string, payload: any, rawBody: any, signature: string) {
     let event: any;
     const gw = gateway.toUpperCase() as PaymentGatewayName;
     switch (gw) {
       case PaymentGatewayName.STRIPE:
-        event = await this.stripe.constructEvent(payload, signature);
+        // Stripe constructEvent a besoin du rawBody (Buffer/string) pour sa propre vérif HMAC.
+        event = await this.stripe.constructEvent(rawBody, signature);
         if (event.type === 'payment_intent.succeeded') await this.confirmPayment(event.data.object.metadata.orderId, event.data.object.id);
         if (event.type === 'payment_intent.payment_failed') await this.failPayment(event.data.object.metadata.orderId);
         break;
@@ -157,8 +158,8 @@ export class PaymentsService {
         break;
       case PaymentGatewayName.FEDAPAY: {
         const dbCreds = await this.loadGatewayCredentials();
-        // Vérification signature HMAC-SHA256 (header X-FEDAPAY-SIGNATURE)
-        if (signature && !this.fedapay.verifySignature(payload, signature, dbCreds.FEDAPAY)) break;
+        // rawBody (Buffer) pour le HMAC, payload (objet parsé) pour les données.
+        if (signature && !this.fedapay.verifySignature(rawBody, signature, dbCreds.FEDAPAY)) break;
         const eventName: string = payload?.name ?? '';
         const tx = payload?.data?.object;
         const orderId: string | undefined = tx?.custom_metadata?.orderId;

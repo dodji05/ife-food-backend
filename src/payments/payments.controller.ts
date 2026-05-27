@@ -27,9 +27,12 @@ export class PaymentsController {
     @Headers('stripe-signature') stripeSig: string,
     @Headers('x-fedapay-signature') fedapaySig: string,
   ) {
-    const payload = (req as any).rawBody ?? req.body;
+    // rawBody (Buffer) → vérification HMAC-SHA256 (FedaPay, Stripe).
+    // body (objet parsé) → lecture des champs de l'événement.
+    const rawBody = (req as any).rawBody ?? req.body;
+    const parsedBody = req.body;
     const sig = stripeSig || fedapaySig || '';
-    return this.paymentsService.handleWebhook(gateway, payload, sig);
+    return this.paymentsService.handleWebhook(gateway, parsedBody, rawBody, sig);
   }
 
   @Get('gateways')
