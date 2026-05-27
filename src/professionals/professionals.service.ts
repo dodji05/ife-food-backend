@@ -245,8 +245,12 @@ export class ProfessionalsService {
     if (!phone || phone.trim().length < 8) {
       throw new BadRequestException('Phone number too short');
     }
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException('Professional profile not found');
+
+    const digits = phone.trim().replace(/\D/g, '');
     const user = await this.prisma.user.findFirst({
-      where: { phone: { contains: phone.trim() }, role: 'DRIVER' },
+      where: { phone: { contains: digits }, role: 'DRIVER' },
       select: {
         id: true, name: true, firstName: true, avatarUrl: true, phone: true,
         driver: {
@@ -257,8 +261,20 @@ export class ProfessionalsService {
         },
       },
     });
-    if (!user || !user.driver) throw new NotFoundException('Driver not found');
-    return { data: { ...user.driver, user: { name: user.name, firstName: user.firstName, avatarUrl: user.avatarUrl, phone: user.phone } } };
+    if (!user || !user.driver) throw new NotFoundException('Livreur introuvable');
+
+    const alreadyFavorite = await this.prisma.professionalFavoriteDriver.findUnique({
+      where: { professionalId_driverId: { professionalId: prof.id, driverId: user.driver.id } },
+      select: { driverId: true },
+    });
+
+    return {
+      data: {
+        ...user.driver,
+        user: { name: user.name, firstName: user.firstName, avatarUrl: user.avatarUrl, phone: user.phone },
+        alreadyFavorite: !!alreadyFavorite,
+      },
+    };
   }
 
   // ── Promo codes (pro-side) ────────────────────────────────────────────────
