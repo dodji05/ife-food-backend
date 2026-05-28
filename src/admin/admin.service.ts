@@ -2140,12 +2140,19 @@ export class AdminService {
     return { data: users };
   }
 
-  async createAdminAccount(dto: { name: string; firstName?: string; email: string; phone: string; level: string; password: string }) {
+  async createAdminAccount(dto: { name: string; firstName?: string; email: string; phone: string; phoneCountry?: string; level: string; password: string }) {
     const VALID_LEVELS = ['SUPER_ADMIN', 'ADMIN', 'SUPPORT', 'MODERATOR', 'ANALYST'];
     if (!VALID_LEVELS.includes(dto.level)) throw new BadRequestException('Niveau admin invalide');
     if (!dto.password || dto.password.length < 8) throw new BadRequestException('Le mot de passe doit contenir au minimum 8 caractères');
     const existing = await this.prisma.user.findFirst({ where: { OR: [{ email: dto.email }, { phone: dto.phone }] } });
     if (existing) throw new BadRequestException('Email ou téléphone déjà utilisé');
+
+    // Infer phoneCountry from prefix if not explicitly provided
+    const PHONE_PREFIXES: Record<string, string> = { '+229': 'BJ', '+221': 'SN', '+225': 'CI', '+228': 'TG' };
+    const phoneCountry = dto.phoneCountry
+      ?? Object.entries(PHONE_PREFIXES).find(([prefix]) => dto.phone.startsWith(prefix))?.[1]
+      ?? 'BJ';
+
     const bcrypt = await import('bcrypt');
     const pinHash = await bcrypt.hash(dto.password, 10);
     const user = await this.prisma.user.create({
@@ -2154,6 +2161,7 @@ export class AdminService {
         firstName: dto.firstName,
         email: dto.email,
         phone: dto.phone,
+        phoneCountry,
         pinHash,
         role: 'ADMIN' as any,
         status: 'ACTIVE' as any,
