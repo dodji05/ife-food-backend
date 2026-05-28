@@ -246,6 +246,9 @@ export class OrdersService {
     // Calculate delivery fee
     const professional = await this.prisma.professional.findUnique({ where: { id: dto.professionalId } });
     if (!professional) throw new NotFoundException('Professionnel introuvable');
+    if (professional.lat == null || professional.lng == null) {
+      this.logger.warn(`Order creation: professional ${professional.id} has no coordinates, defaulting to Cotonou`);
+    }
     const deliveryFee = await this.geo.calculateDeliveryFee(
       professional.lat, professional.lng,
       dto.deliveryLat, dto.deliveryLng,

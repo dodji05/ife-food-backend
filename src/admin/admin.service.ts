@@ -1516,6 +1516,11 @@ export class AdminService {
       }
     }
 
+    if (!id) {
+      if (!name?.toString().trim()) throw new BadRequestException('Le nom de la zone est requis');
+      if (baseFee == null || isNaN(Number(baseFee))) throw new BadRequestException('Les frais de base sont requis');
+    }
+
     if (id) {
       const patch: any = {};
       if (name !== undefined)              patch.name              = name;

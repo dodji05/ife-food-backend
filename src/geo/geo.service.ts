@@ -22,15 +22,25 @@ export class GeoService {
 
   /** Calculate delivery fee based on the active delivery mode */
   async calculateDeliveryFee(
-    fromLat: number, fromLng: number,
-    toLat: number, toLng: number,
+    fromLat: unknown, fromLng: unknown,
+    toLat: unknown, toLng: unknown,
     fromCity?: string, toCity?: string,
   ): Promise<number> {
     const modeCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'deliveryModeConfig' } });
     const activeMode: string = (modeCfg?.value as any)?.activeMode ?? 'zone';
 
-    const distance = this.calculateDistance(fromLat, fromLng, toLat, toLng);
-    const weatherMultiplier = await this.getWeatherMultiplier(toLat, toLng);
+    // Guard: Prisma Decimal fields arrive as Decimal | null at runtime despite TS typing.
+    const safe = (v: unknown, fallback: number): number => {
+      const n = Number(v);
+      return isFinite(n) ? n : fallback;
+    };
+    const sFromLat = safe(fromLat, 6.36);
+    const sFromLng = safe(fromLng, 2.42);
+    const sToLat   = safe(toLat,   6.36);
+    const sToLng   = safe(toLng,   2.42);
+
+    const distance = this.calculateDistance(sFromLat, sFromLng, sToLat, sToLng);
+    const weatherMultiplier = await this.getWeatherMultiplier(sToLat, sToLng);
 
     // ── city mode : tarif fixe par paire de villes ──────────────────────────
     if (activeMode === 'city') {
