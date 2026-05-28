@@ -28,10 +28,13 @@ export class MessagesGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('join')
-  handleJoin(@MessageBody() data: { conversationId: string }, @ConnectedSocket() client: Socket) {
+  async handleJoin(@MessageBody() data: { conversationId: string }, @ConnectedSocket() client: Socket) {
     const user = (client.handshake as any).user;
     if (!user) throw new WsException('Unauthorized');
-    // TODO: vérifier que l'utilisateur fait bien partie de la conversation
+    const orderId = data.conversationId?.replace(/^order_/, '');
+    if (!orderId) throw new WsException('conversationId invalide');
+    const allowed = await this.messagesService.canAccessConversation(user.id, orderId);
+    if (!allowed) throw new WsException('Accès refusé à cette conversation');
     client.join(data.conversationId);
   }
 

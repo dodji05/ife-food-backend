@@ -11,6 +11,11 @@ import { MessagesService } from './messages.service';
 export class MessagesController {
   constructor(private messagesService: MessagesService) {}
 
+  @Get('conversations')
+  getConversations(@CurrentUser() user: any) {
+    return this.messagesService.getConversations(user.id);
+  }
+
   @Post(':conversationId')
   sendMessage(@CurrentUser() user: any, @Param('conversationId') convId: string, @Body('content') content: string) {
     return this.messagesService.sendMessage(user.id, convId, content);
@@ -22,7 +27,7 @@ export class MessagesController {
   }
 
   @Patch(':conversationId/read')
-  markRead(@Param('conversationId') convId: string) {
-    return this.messagesService.markRead(convId);
+  markRead(@CurrentUser() user: any, @Param('conversationId') convId: string) {
+    return this.messagesService.markRead(convId, user.id);
   }
 }

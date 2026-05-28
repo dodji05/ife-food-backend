@@ -2187,6 +2187,38 @@ export class AdminService {
     return { data: user };
   }
 
+  async getAllConversations(search?: string) {
+    const where = search
+      ? { conversationId: { contains: search, mode: 'insensitive' as const } }
+      : {};
+    const lastMessages = await this.prisma.message.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      distinct: ['conversationId'],
+      include: { sender: { select: { name: true, firstName: true } } },
+      take: 100,
+    });
+    return Promise.all(lastMessages.map(async (msg) => {
+      const count = await this.prisma.message.count({ where: { conversationId: msg.conversationId } });
+      const unread = await this.prisma.message.count({ where: { conversationId: msg.conversationId, read: false } });
+      return {
+        conversationId: msg.conversationId,
+        lastMessage: { content: msg.content, createdAt: msg.createdAt },
+        senderName: [msg.sender.firstName, msg.sender.name].filter(Boolean).join(' ') || 'Inconnu',
+        messageCount: count,
+        unreadCount: unread,
+      };
+    }));
+  }
+
+  async getAdminConversation(conversationId: string) {
+    return this.prisma.message.findMany({
+      where: { conversationId },
+      include: { sender: { select: { name: true, firstName: true, avatarUrl: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async toggleAdminStatus(id: string, status: 'ACTIVE' | 'SUSPENDED') {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user || user.role !== ('ADMIN' as any)) throw new NotFoundException('Compte admin introuvable');

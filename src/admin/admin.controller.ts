@@ -404,6 +404,17 @@ export class AdminController {
   @Delete('delivery-zones/:id')
   deleteDeliveryZone(@Param('id') id: string) { return this.adminService.deleteDeliveryZone(id); }
 
+  // MESSAGES
+  @Get('messages/conversations')
+  getAdminConversations(@Query('search') search?: string) {
+    return this.adminService.getAllConversations(search);
+  }
+
+  @Get('messages/:conversationId')
+  getAdminConversation(@Param('conversationId') conversationId: string) {
+    return this.adminService.getAdminConversation(conversationId);
+  }
+
   // NOTIFICATIONS
   @Post('notifications/broadcast')
   broadcast(@Body() body: { title: string; body: string; role?: string; countries?: string[] }) {
