@@ -1481,19 +1481,34 @@ export class AdminService {
 
   async upsertDeliveryZone(dto: any) {
     const { id, name, country, fromCity, toCity, baseFee, perKmFee, currency, weatherMultiplier, isActive } = dto;
-    const data = {
-      name: name ?? '',
-      country: country ?? 'BJ',
-      fromCity: fromCity || null,
-      toCity: toCity || null,
-      baseFee: Number(baseFee ?? 0),
-      perKmFee: Number(perKmFee ?? 0),
-      currency: currency ?? 'XOF',
-      weatherMultiplier: Number(weatherMultiplier ?? 1),
-      isActive: isActive !== false,
-    };
-    if (id) return this.prisma.deliveryZone.update({ where: { id }, data });
-    return this.prisma.deliveryZone.create({ data });
+
+    if (id) {
+      const patch: any = {};
+      if (name !== undefined)              patch.name              = name;
+      if (country !== undefined)           patch.country           = country;
+      if ('fromCity' in dto)               patch.fromCity          = fromCity || null;
+      if ('toCity' in dto)                 patch.toCity            = toCity || null;
+      if (baseFee !== undefined)           patch.baseFee           = Number(baseFee);
+      if (perKmFee !== undefined)          patch.perKmFee          = Number(perKmFee);
+      if (currency !== undefined)          patch.currency          = currency;
+      if (weatherMultiplier !== undefined) patch.weatherMultiplier = Number(weatherMultiplier);
+      if (isActive !== undefined)          patch.isActive          = isActive !== false;
+      return this.prisma.deliveryZone.update({ where: { id }, data: patch });
+    }
+
+    return this.prisma.deliveryZone.create({
+      data: {
+        name: name ?? '',
+        country: country ?? 'BJ',
+        fromCity: fromCity || null,
+        toCity: toCity || null,
+        baseFee: Number(baseFee ?? 0),
+        perKmFee: Number(perKmFee ?? 0),
+        currency: currency ?? 'XOF',
+        weatherMultiplier: Number(weatherMultiplier ?? 1),
+        isActive: isActive !== false,
+      },
+    });
   }
 
   async deleteDeliveryZone(id: string) {
