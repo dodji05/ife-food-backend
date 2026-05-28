@@ -45,9 +45,14 @@ export class WsJwtGuard implements CanActivate {
 
   private extractToken(client: Socket): string | null {
     const fromAuth = (client.handshake.auth as any)?.token as string | undefined;
-    if (fromAuth) return fromAuth.replace(/^Bearer\s+/i, '');
+    if (fromAuth && fromAuth !== 'null' && fromAuth !== 'undefined') {
+      return fromAuth.replace(/^Bearer\s+/i, '');
+    }
     const header = client.handshake.headers.authorization;
-    if (header?.toLowerCase().startsWith('bearer ')) return header.slice(7);
+    if (header?.toLowerCase().startsWith('bearer ')) {
+      const t = header.slice(7);
+      if (t && t !== 'null' && t !== 'undefined') return t;
+    }
     return null;
   }
 
