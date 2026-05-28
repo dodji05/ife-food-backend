@@ -176,7 +176,8 @@ export class ProfessionalsService {
         avgRating: Math.round(avgRating * 10) / 10,
         reviewCount: prof._count.reviews,
         deliveryTimeMin: deliveryDefaults.defaultTimeMin ?? 25,
-        deliveryFee: deliveryDefaults.defaultFee ?? 0,
+        // deliveryFee volontairement absent : la valeur réelle est calculée dynamiquement
+        // par geo.service.calculateDeliveryFee() selon le mode actif (zone/km/city).
       },
     };
   }

@@ -91,31 +91,38 @@ export class GeoService {
 
     // ── zone mode : tarif fixe — matching par ville de livraison ───────────
     if (activeMode === 'zone') {
+      const tc = toCity?.trim();
       let zone = null;
-      if (toCity) {
-        // Correspondance exacte sur toCity
+
+      if (tc) {
+        // 1. Correspondance exacte sur toCity (insensible à la casse)
         zone = await this.prisma.deliveryZone.findFirst({
-          where: { toCity, fromCity: null, perKmFee: { lte: 0 }, isActive: true },
+          where: { toCity: { equals: tc, mode: 'insensitive' }, fromCity: null, perKmFee: { lte: 0 }, isActive: true },
         });
-        // Correspondance approximative sur le nom de la zone
+        // 2. Correspondance sur le nom de la zone
         if (!zone) {
           zone = await this.prisma.deliveryZone.findFirst({
-            where: {
-              name: { contains: toCity, mode: 'insensitive' },
-              perKmFee: { lte: 0 },
-              isActive: true,
-            },
+            where: { name: { contains: tc, mode: 'insensitive' }, perKmFee: { lte: 0 }, isActive: true },
           });
         }
       }
-      // Première zone active comme filet de sécurité
+      // 3. Première zone active comme filet de sécurité
       if (!zone) {
         zone = await this.prisma.deliveryZone.findFirst({
           where: { fromCity: null, perKmFee: { lte: 0 }, isActive: true },
           orderBy: { createdAt: 'asc' },
         });
       }
-      if (zone) return Math.round(Number(zone.baseFee) * weatherMultiplier);
+
+      if (zone) {
+        const fee = Math.round(Number(zone.baseFee) * weatherMultiplier);
+        this.logger.log(
+          `Zone mode: zone="${zone.name}" baseFee=${zone.baseFee} × weather${weatherMultiplier} → ${fee} XOF`,
+        );
+        return fee;
+      }
+
+      this.logger.warn(`Zone mode: no active zone for toCity="${toCity ?? '?'}", falling back to distance`);
     }
 
     // ── fallback global : distance × perKm ─────────────────────────────────
