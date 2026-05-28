@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, ParseFloatPipe, DefaultValuePipe } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, DefaultValuePipe, ParseFloatPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
@@ -36,15 +36,33 @@ export class GeoController {
   @Get('delivery-fee')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Calculate delivery fee' })
-  getDeliveryFee(
-    @Query('fromLat', ParseFloatPipe) fromLat: number,
-    @Query('fromLng', ParseFloatPipe) fromLng: number,
+  @ApiOperation({ summary: 'Estimate delivery fee — accepts professionalId or explicit fromLat/fromLng' })
+  async getDeliveryFee(
     @Query('toLat', ParseFloatPipe) toLat: number,
     @Query('toLng', ParseFloatPipe) toLng: number,
+    @Query('fromLat') fromLatStr?: string,
+    @Query('fromLng') fromLngStr?: string,
+    @Query('professionalId') professionalId?: string,
     @Query('fromCity') fromCity?: string,
     @Query('toCity') toCity?: string,
   ) {
-    return this.geoService.calculateDeliveryFee(fromLat, fromLng, toLat, toLng, fromCity, toCity);
+    let resolvedFromLat = fromLatStr ? parseFloat(fromLatStr) : undefined;
+    let resolvedFromLng = fromLngStr ? parseFloat(fromLngStr) : undefined;
+    let resolvedFromCity = fromCity;
+
+    if (professionalId && (resolvedFromLat === undefined || resolvedFromLng === undefined)) {
+      const coords = await this.geoService.getProfessionalCoords(professionalId);
+      if (coords) {
+        resolvedFromLat ??= coords.lat;
+        resolvedFromLng ??= coords.lng;
+        resolvedFromCity ??= coords.city;
+      }
+    }
+
+    return this.geoService.calculateDeliveryFee(
+      resolvedFromLat ?? 6.36, resolvedFromLng ?? 2.42,
+      toLat, toLng,
+      resolvedFromCity, toCity,
+    );
   }
 }

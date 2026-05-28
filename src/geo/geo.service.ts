@@ -20,30 +20,80 @@ export class GeoService {
 
   private toRad(deg: number) { return deg * (Math.PI / 180); }
 
-  /** Calculate delivery fee based on zones or distance */
+  /** Calculate delivery fee based on the active delivery mode */
   async calculateDeliveryFee(
     fromLat: number, fromLng: number,
     toLat: number, toLng: number,
     fromCity?: string, toCity?: string,
   ): Promise<number> {
-    // Check city-based zones first
-    if (fromCity && toCity) {
+    const modeCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'deliveryModeConfig' } });
+    const activeMode: string = (modeCfg?.value as any)?.activeMode ?? 'zone';
+
+    const distance = this.calculateDistance(fromLat, fromLng, toLat, toLng);
+    const weatherMultiplier = await this.getWeatherMultiplier(toLat, toLng);
+
+    // ── city mode : tarif fixe par paire de villes ──────────────────────────
+    if (activeMode === 'city' && fromCity && toCity) {
       const zone = await this.prisma.deliveryZone.findFirst({
         where: { fromCity, toCity, isActive: true },
       });
+      if (zone) return Math.round(Number(zone.baseFee) * weatherMultiplier);
+    }
+
+    // ── km mode : frais de base + tarif par km ──────────────────────────────
+    if (activeMode === 'km') {
+      const zone = await this.prisma.deliveryZone.findFirst({
+        where: { perKmFee: { gt: 0 }, isActive: true },
+        orderBy: { createdAt: 'asc' },
+      });
       if (zone) {
-        const distance = this.calculateDistance(fromLat, fromLng, toLat, toLng);
-        const weatherMultiplier = await this.getWeatherMultiplier(toLat, toLng);
-        return (Number(zone.baseFee) + Number(zone.perKmFee) * distance) * weatherMultiplier;
+        return Math.round((Number(zone.baseFee) + Number(zone.perKmFee) * distance) * weatherMultiplier);
       }
     }
 
-    // Distance-based fallback
-    const distance = this.calculateDistance(fromLat, fromLng, toLat, toLng);
+    // ── zone mode : tarif fixe — matching par ville de livraison ───────────
+    if (activeMode === 'zone') {
+      let zone = null;
+      if (toCity) {
+        // Correspondance exacte sur toCity
+        zone = await this.prisma.deliveryZone.findFirst({
+          where: { toCity, fromCity: null, perKmFee: { lte: 0 }, isActive: true },
+        });
+        // Correspondance approximative sur le nom de la zone
+        if (!zone) {
+          zone = await this.prisma.deliveryZone.findFirst({
+            where: {
+              name: { contains: toCity, mode: 'insensitive' },
+              perKmFee: { lte: 0 },
+              isActive: true,
+            },
+          });
+        }
+      }
+      // Première zone active comme filet de sécurité
+      if (!zone) {
+        zone = await this.prisma.deliveryZone.findFirst({
+          where: { fromCity: null, perKmFee: { lte: 0 }, isActive: true },
+          orderBy: { createdAt: 'asc' },
+        });
+      }
+      if (zone) return Math.round(Number(zone.baseFee) * weatherMultiplier);
+    }
+
+    // ── fallback global : distance × perKm ─────────────────────────────────
     const globalFeeConfig = await this.prisma.platformConfig.findUnique({ where: { key: 'deliveryFeePerKm' } });
-    const perKm = globalFeeConfig?.value != null ? Number(globalFeeConfig.value) : 150; // 150 XOF/km default
-    const weatherMultiplier = await this.getWeatherMultiplier(toLat, toLng);
+    const perKm = globalFeeConfig?.value != null ? Number(globalFeeConfig.value) : 150;
     return Math.round(distance * perKm * weatherMultiplier);
+  }
+
+  /** Resolve professional coordinates by ID */
+  async getProfessionalCoords(professionalId: string): Promise<{ lat: number; lng: number; city: string | undefined } | null> {
+    const pro = await this.prisma.professional.findUnique({
+      where: { id: professionalId },
+      select: { lat: true, lng: true, city: true },
+    });
+    if (!pro || pro.lat == null || pro.lng == null) return null;
+    return { lat: Number(pro.lat), lng: Number(pro.lng), city: pro.city ?? undefined };
   }
 
   /** Get weather multiplier for delivery fee */
