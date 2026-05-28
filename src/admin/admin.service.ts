@@ -1497,14 +1497,31 @@ export class AdminService {
   }
 
   async upsertDeliveryZone(dto: any) {
-    const { id, name, country, fromCity, toCity, baseFee, perKmFee, currency, weatherMultiplier, isActive } = dto;
+    const { id, name, country, baseFee, perKmFee, currency, weatherMultiplier, isActive } = dto;
+    // Normalize city names to avoid whitespace or casing conflicts
+    const fromCity = typeof dto.fromCity === 'string' ? dto.fromCity.trim() || null : dto.fromCity ?? null;
+    const toCity   = typeof dto.toCity   === 'string' ? dto.toCity.trim()   || null : dto.toCity   ?? null;
+
+    // Prevent duplicate fromCity→toCity pairs
+    if (fromCity && toCity) {
+      const conflict = await this.prisma.deliveryZone.findFirst({
+        where: {
+          fromCity: { equals: fromCity, mode: 'insensitive' },
+          toCity:   { equals: toCity,   mode: 'insensitive' },
+          ...(id ? { NOT: { id } } : {}),
+        },
+      });
+      if (conflict) {
+        throw new BadRequestException(`Un tarif pour ${fromCity} → ${toCity} existe déjà`);
+      }
+    }
 
     if (id) {
       const patch: any = {};
       if (name !== undefined)              patch.name              = name;
       if (country !== undefined)           patch.country           = country;
-      if ('fromCity' in dto)               patch.fromCity          = fromCity || null;
-      if ('toCity' in dto)                 patch.toCity            = toCity || null;
+      if ('fromCity' in dto)               patch.fromCity          = fromCity;
+      if ('toCity' in dto)                 patch.toCity            = toCity;
       if (baseFee !== undefined)           patch.baseFee           = Number(baseFee);
       if (perKmFee !== undefined)          patch.perKmFee          = Number(perKmFee);
       if (currency !== undefined)          patch.currency          = currency;
@@ -1517,8 +1534,8 @@ export class AdminService {
       data: {
         name: name ?? '',
         country: country ?? 'BJ',
-        fromCity: fromCity || null,
-        toCity: toCity || null,
+        fromCity,
+        toCity,
         baseFee: Number(baseFee ?? 0),
         perKmFee: Number(perKmFee ?? 0),
         currency: currency ?? 'XOF',

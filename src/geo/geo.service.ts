@@ -33,11 +33,21 @@ export class GeoService {
     const weatherMultiplier = await this.getWeatherMultiplier(toLat, toLng);
 
     // ── city mode : tarif fixe par paire de villes ──────────────────────────
-    if (activeMode === 'city' && fromCity && toCity) {
-      const zone = await this.prisma.deliveryZone.findFirst({
-        where: { fromCity, toCity, isActive: true },
-      });
-      if (zone) return Math.round(Number(zone.baseFee) * weatherMultiplier);
+    if (activeMode === 'city') {
+      const fc = fromCity?.trim();
+      const tc = toCity?.trim();
+      if (fc && tc) {
+        const zone = await this.prisma.deliveryZone.findFirst({
+          where: {
+            fromCity: { equals: fc, mode: 'insensitive' },
+            toCity:   { equals: tc, mode: 'insensitive' },
+            isActive: true,
+          },
+        });
+        if (zone) return Math.round(Number(zone.baseFee) * weatherMultiplier);
+        // Aucune zone configurée pour ce trajet — fallback global
+        this.logger.warn(`City mode: no zone for ${fc} → ${tc}, falling back to distance`);
+      }
     }
 
     // ── km mode : frais de base + tarif par km ──────────────────────────────
