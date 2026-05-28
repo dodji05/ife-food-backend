@@ -256,6 +256,12 @@ export class AdminController {
   @AdminLevel('SUPER_ADMIN')
   setMapsCredentials(@Body() body: any) { return this.adminService.setMapsCredentials(body); }
 
+  @Get('config/delivery-mode')
+  getDeliveryModeConfig() { return this.adminService.getDeliveryModeConfig(); }
+
+  @Put('config/delivery-mode')
+  setDeliveryModeConfig(@Body('activeMode') activeMode: string) { return this.adminService.setDeliveryModeConfig(activeMode); }
+
   // PAYMENTS
   @Get('payments/stats')
   getPaymentStats() { return this.adminService.getPaymentStats(); }

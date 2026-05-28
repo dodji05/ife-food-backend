@@ -1475,6 +1475,23 @@ export class AdminService {
   }
 
   // ─── DELIVERY ZONES ───────────────────────
+  async getDeliveryModeConfig() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'deliveryModeConfig' } });
+    const raw = (cfg?.value as any) ?? {};
+    return { activeMode: raw.activeMode ?? 'zone' };
+  }
+
+  async setDeliveryModeConfig(activeMode: string) {
+    const valid = ['zone', 'km', 'city'];
+    if (!valid.includes(activeMode)) throw new BadRequestException('Mode invalide');
+    await this.prisma.platformConfig.upsert({
+      where:  { key: 'deliveryModeConfig' },
+      update: { value: { activeMode } },
+      create: { key: 'deliveryModeConfig', value: { activeMode } },
+    });
+    return { activeMode };
+  }
+
   async getDeliveryZones() {
     return this.prisma.deliveryZone.findMany({ orderBy: { createdAt: 'asc' } });
   }
