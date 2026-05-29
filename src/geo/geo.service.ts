@@ -30,7 +30,9 @@ export class GeoService {
     const activeMode: string = (modeCfg?.value as any)?.activeMode ?? 'zone';
 
     // Guard: Prisma Decimal fields arrive as Decimal | null at runtime despite TS typing.
+    // Number(null) === 0 est fini → sans guard, null donne (0,0) = équateur.
     const safe = (v: unknown, fallback: number): number => {
+      if (v == null) return fallback;
       const n = Number(v);
       return isFinite(n) ? n : fallback;
     };
