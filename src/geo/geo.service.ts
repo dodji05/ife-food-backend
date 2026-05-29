@@ -176,15 +176,15 @@ export class GeoService {
 
   /** Get nearby professionals */
   async getNearbyProfessionals(lat: number, lng: number, radiusKm: number = 10, category?: string) {
-    // Retourne TOUS les pros VALIDATED sans filtre géo ni isOpen par défaut.
-    // Pour réactiver le filtre géographique (rayon + isOpen), passer
-    // GEO_DISABLE_FILTER=false dans les variables d'environnement.
+    // Retourne TOUS les pros VALIDATED — les fermés sont inclus intentionnellement
+    // pour que le client puisse consulter les menus et planifier une commande.
+    // Le statut isOpen est affiché côté mobile (badge Ouvert/Fermé) mais ne
+    // filtre plus la liste de découverte.
     const testMode = this.config.get('GEO_DISABLE_FILTER') !== 'false';
 
     const professionals = await this.prisma.professional.findMany({
       where: {
         status: 'VALIDATED',
-        ...(testMode ? {} : { isOpen: true }),
         ...(category && { category: category as any }),
       },
       include: { reviews: { select: { professionalRating: true } } },
