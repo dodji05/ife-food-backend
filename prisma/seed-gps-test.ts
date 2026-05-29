@@ -139,10 +139,11 @@ async function main() {
     await prisma.driver.update({
       where: { id: driver.id },
       data: {
-        currentLat: GPS.driver.lat,
-        currentLng: GPS.driver.lng,
-        zoneCity:   GPS.driver.city,
+        currentLat:  GPS.driver.lat,
+        currentLng:  GPS.driver.lng,
+        zoneCity:    GPS.driver.city,
         isAvailable: true,
+        status:      'ONLINE' as any,
       },
     });
     console.log(`✅ Livreur mis à jour`);
