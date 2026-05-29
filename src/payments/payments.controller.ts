@@ -1,9 +1,9 @@
-import { Controller, Post, Get, Param, Headers, Req, Res, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Param, Headers, Req, Query, UseGuards, Header } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 import { PaymentsService } from './payments.service';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -59,62 +59,42 @@ export class PaymentsController {
    */
   @Get('fedapay-return')
   @Public()
+  @Header('Content-Type', 'text/html; charset=utf-8')
   @ApiOperation({ summary: 'FedaPay payment return page (callback_url target)' })
-  fedapayReturn(
-    @Query('status') status: string,
-    @Query('transaction_id') transactionId: string,
-    @Res() res: Response,
-  ) {
+  fedapayReturn(@Query('status') status: string): string {
     const success = !status || status === 'approved';
-    const emoji   = success ? '✅' : '⚠️';
-    const title   = success ? 'Paiement effectué' : 'Paiement non finalisé';
+    const title   = success ? 'Paiement effectue' : 'Paiement non finalise';
     const message = success
-      ? 'Votre paiement a bien été reçu. Fermez cette fenêtre pour retourner dans ifè FOOD.'
-      : 'Le paiement n\'a pas abouti. Fermez cette fenêtre et réessayez depuis l\'application.';
-    const color = success ? '#1A6B3C' : '#F59E0B';
+      ? 'Votre paiement a bien ete recu. Fermez cette fenetre pour retourner dans ife FOOD.'
+      : 'Le paiement n\'a pas abouti. Fermez cette fenetre et reessayez depuis l\'application.';
+    const color   = success ? '#1A6B3C' : '#F59E0B';
+    const icon    = success ? '&#10003;' : '&#9888;';
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(`<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>${title} — ifè FOOD</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>${title}</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f5f7f5; display: flex; align-items: center;
-      justify-content: center; min-height: 100vh; padding: 24px;
-    }
-    .card {
-      background: #fff; border-radius: 20px; padding: 40px 32px;
-      text-align: center; max-width: 380px; width: 100%;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-    }
-    .emoji { font-size: 56px; margin-bottom: 16px; }
-    h1 { font-size: 22px; font-weight: 800; color: ${color}; margin-bottom: 12px; }
-    p  { font-size: 15px; color: #64748b; line-height: 1.6; margin-bottom: 28px; }
-    .btn {
-      display: inline-block; background: ${color}; color: #fff;
-      border: none; border-radius: 14px; padding: 14px 32px;
-      font-size: 15px; font-weight: 700; cursor: pointer; width: 100%;
-    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f7f5;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+    .card{background:#fff;border-radius:20px;padding:40px 32px;text-align:center;max-width:380px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+    .icon{font-size:56px;margin-bottom:16px;color:${color}}
+    h1{font-size:22px;font-weight:800;color:${color};margin-bottom:12px}
+    p{font-size:15px;color:#64748b;line-height:1.6;margin-bottom:28px}
+    .btn{display:block;width:100%;background:${color};color:#fff;border:none;border-radius:14px;padding:14px 32px;font-size:15px;font-weight:700;cursor:pointer}
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="emoji">${emoji}</div>
+    <div class="icon">${icon}</div>
     <h1>${title}</h1>
     <p>${message}</p>
     <button class="btn" onclick="window.close()">Fermer et retourner dans l'app</button>
   </div>
-  <script>
-    // Tente de fermer automatiquement (fonctionne si ouvert via window.open)
-    // Chrome Custom Tab l'ignore mais affiche le bouton à la place.
-    setTimeout(function() { try { window.close(); } catch(e) {} }, 1500);
-  </script>
+  <script>setTimeout(function(){try{window.close()}catch(e){}},1500)</script>
 </body>
-</html>`);
+</html>`;
   }
 }
