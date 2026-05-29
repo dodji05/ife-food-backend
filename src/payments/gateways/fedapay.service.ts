@@ -27,7 +27,7 @@ export class FedapayService {
     const payBaseUrl = sandbox ? 'https://sandbox-pay.fedapay.com' : 'https://pay.fedapay.com';
     const secretKey = overrideConfig?.secretKey || this.config.get<string>('FEDAPAY_SECRET_KEY', '');
     const appUrl = this.config.get<string>('APP_URL', '');
-    const defaultCallback = appUrl.startsWith('https://') ? `${appUrl}/api/payments/fedapay-return` : '';
+    const defaultCallback = appUrl.startsWith('https://') ? `${appUrl}/api/v1/payments/fedapay-return` : '';
     const rawCallback = overrideConfig?.callbackUrl ?? this.config.get<string>('FEDAPAY_CALLBACK_URL', defaultCallback);
     // N'envoyer callback_url à FedaPay que si c'est une URL HTTPS valide
     // (FedaPay rejette localhost et les URLs http://).
