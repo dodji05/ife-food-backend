@@ -66,13 +66,17 @@ export class DriversService {
   }
 
   async updateLocation(userId: string, dto: UpdateLocationDto) {
-    const updated = await this.prisma.driver.update({
+    // updateMany ne plante pas si aucun profil Driver n'existe encore pour ce userId.
+    const { count } = await this.prisma.driver.updateMany({
       where: { userId },
       data: { currentLat: dto.lat, currentLng: dto.lng },
     });
-    // Wrap dans { data } pour cohérence (utilisé par PATCH /drivers/me/location
-    // toutes les 5 secondes côté mobile).
-    return { data: updated };
+    if (count === 0) {
+      // Profil driver absent — on retourne une réponse vide plutôt que de crasher.
+      return { data: null };
+    }
+    const driver = await this.prisma.driver.findUnique({ where: { userId } });
+    return { data: driver };
   }
 
   async getAvailableDrivers(lat: number, lng: number, radiusKm: number = 5) {
