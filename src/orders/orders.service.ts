@@ -102,9 +102,11 @@ export class OrdersService {
       };
 
       // Drivers éligibles non encore contactés pour cette commande.
+      // status 'ONLINE' = validé + en ligne (toggleAvailability écrit ONLINE/OFFLINE,
+      // pas VALIDATED — le filtre VALIDATED était erroné et bloquait tout dispatch).
       const eligibleDrivers = await this.prisma.driver.findMany({
         where: {
-          status:      'VALIDATED' as any,
+          status:      'ONLINE' as any,
           isAvailable: true,
           ...(triedUserIds.size > 0 && { userId: { notIn: Array.from(triedUserIds) } }),
         },
