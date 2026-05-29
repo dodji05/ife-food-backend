@@ -30,20 +30,20 @@ const DRIVER_ID  = '611b1ef0-6221-4f09-8c62-1c0790d90b68';
 
 const GPS = {
   pro: {
-    lat: 6.3614,
-    lng: 2.4017,
-    address: 'Zone Haie Vive, Cotonou',
+    lat: 6.3654,
+    lng: 2.4183,
+    address: 'Quartier Jonquet, Cotonou',
     city: 'Cotonou',
   },
   client: {
-    lat: 6.3702,
-    lng: 2.4089,
-    address: 'Cadjèhoun, Cotonou',
-    city: 'Cotonou',
+    lat: 6.4345,
+    lng: 2.4801,
+    address: 'Abomey-Calavi, Bénin',
+    city: 'Abomey-Calavi',
   },
   driver: {
-    lat: 6.3745,
-    lng: 2.4142,
+    lat: 6.3654,
+    lng: 2.4909,
     city: 'Cotonou',
   },
 };
