@@ -1,9 +1,9 @@
-import { Controller, Post, Get, Param, Headers, Req, Query, UseGuards, Header } from '@nestjs/common';
+import { Controller, Post, Get, Param, Headers, Req, Res, Query, UseGuards, Header } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 import { PaymentsService } from './payments.service';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -59,42 +59,89 @@ export class PaymentsController {
    */
   @Get('fedapay-return')
   @Public()
-  @Header('Content-Type', 'text/html; charset=utf-8')
   @ApiOperation({ summary: 'FedaPay payment return page (callback_url target)' })
-  fedapayReturn(@Query('status') status: string): string {
+  fedapayReturn(
+    @Query('status') status: string,
+    @Res() res: Response,
+  ): void {
     const success = !status || status === 'approved';
-    const title   = success ? 'Paiement effectue' : 'Paiement non finalise';
-    const message = success
-      ? 'Votre paiement a bien ete recu. Fermez cette fenetre pour retourner dans ife FOOD.'
-      : 'Le paiement n\'a pas abouti. Fermez cette fenetre et reessayez depuis l\'application.';
     const color   = success ? '#1A6B3C' : '#F59E0B';
+    const bgColor = success ? '#F0FFF4' : '#FFFBEB';
+    const title   = success ? 'Paiement effectue !' : 'Paiement non finalise';
+    const message = success
+      ? 'Votre paiement a bien ete recu par ife FOOD.'
+      : 'Le paiement n\'a pas abouti. Reessayez depuis l\'application.';
     const icon    = success ? '&#10003;' : '&#9888;';
 
-    return `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>${title}</title>
+  <title>${title} — ife FOOD</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f7f5;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
-    .card{background:#fff;border-radius:20px;padding:40px 32px;text-align:center;max-width:380px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,.08)}
-    .icon{font-size:56px;margin-bottom:16px;color:${color}}
-    h1{font-size:22px;font-weight:800;color:${color};margin-bottom:12px}
-    p{font-size:15px;color:#64748b;line-height:1.6;margin-bottom:28px}
-    .btn{display:block;width:100%;background:${color};color:#fff;border:none;border-radius:14px;padding:14px 32px;font-size:15px;font-weight:700;cursor:pointer}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:${bgColor};
+      min-height:100vh;
+      display:flex;align-items:center;justify-content:center;
+      padding:24px;
+    }
+    .card{
+      background:#fff;
+      border-radius:24px;
+      padding:48px 32px 40px;
+      text-align:center;
+      max-width:400px;width:100%;
+      box-shadow:0 8px 40px rgba(0,0,0,0.10);
+    }
+    .circle{
+      width:80px;height:80px;border-radius:50%;
+      background:${color};
+      display:flex;align-items:center;justify-content:center;
+      margin:0 auto 24px;
+      font-size:36px;color:#fff;font-weight:900;
+    }
+    h1{font-size:24px;font-weight:800;color:#1a1d1b;margin-bottom:12px}
+    .sub{font-size:15px;color:#64748b;line-height:1.6;margin-bottom:8px}
+    .hint{
+      display:flex;align-items:center;justify-content:center;gap:8px;
+      margin:24px 0 32px;
+      background:#f8fafc;border-radius:12px;padding:14px 16px;
+      font-size:13px;color:#475569;font-weight:600;
+    }
+    .arrow{font-size:20px}
+    .badge{
+      display:inline-block;
+      background:${color}18;
+      color:${color};
+      border:1.5px solid ${color}40;
+      border-radius:10px;
+      padding:10px 16px;
+      font-size:13px;font-weight:700;
+      margin-bottom:8px;
+    }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="icon">${icon}</div>
+    <div class="circle">${icon}</div>
     <h1>${title}</h1>
-    <p>${message}</p>
-    <button class="btn" onclick="window.close()">Fermer et retourner dans l'app</button>
+    <p class="sub">${message}</p>
+
+    <div class="hint">
+      <span class="arrow">&#8592;</span>
+      <span>Appuyez sur la fleche retour pour revenir dans l'application</span>
+    </div>
+
+    <div class="badge">ife FOOD</div>
+    <p style="font-size:11px;color:#94a3b8;margin-top:8px">Powered by FedaPay</p>
   </div>
-  <script>setTimeout(function(){try{window.close()}catch(e){}},1500)</script>
 </body>
 </html>`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end(html);
   }
 }
