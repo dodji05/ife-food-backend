@@ -16,7 +16,8 @@ export class TasksService {
     this.logger.log('🔄 Refreshing exchange rates...');
     try {
       const apiKey = this.config.get('EXCHANGE_RATE_API_KEY');
-      if (!apiKey) return;
+      // Ignorer si la clé est absente ou contient encore la valeur placeholder
+      if (!apiKey || apiKey.includes('your_') || apiKey.length < 10) return;
 
       const baseCurrencies = ['XOF', 'EUR', 'USD', 'GBP'];
       for (const base of baseCurrencies) {
