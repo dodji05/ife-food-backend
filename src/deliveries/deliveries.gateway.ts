@@ -6,8 +6,8 @@ import {
   ConnectedSocket,
   OnGatewayConnection,
   WsException,
-  Logger,
 } from '@nestjs/websockets';
+import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
