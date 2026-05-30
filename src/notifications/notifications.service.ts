@@ -1,23 +1,37 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
 import { JWT } from 'google-auth-library';
 
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleInit {
   private readonly logger = new Logger(NotificationsService.name);
 
-  // ── Cache OAuth token Firebase ────────────────────────────────────────────
-  // Les access tokens FCM expirent en 1h (3600s). On cache et refresh à 55min
-  // pour éviter tout edge case. Le bug initial : la version précédente lisait
-  // FIREBASE_ACCESS_TOKEN du .env -> jamais rafraîchi -> toutes les notifs
-  // échouaient silencieusement après 1h.
   private cachedToken: string | null = null;
   private cachedTokenExpiry = 0;
   private jwtClient: JWT | null = null;
 
   constructor(private prisma: PrismaService, private config: ConfigService) {}
+
+  /** Vérifie la connexion Firebase au démarrage et log le résultat. */
+  async onModuleInit() {
+    try {
+      const raw = this.config.get<string>('FIREBASE_SERVICE_ACCOUNT_JSON');
+      if (!raw || raw.includes('your_firebase')) {
+        this.logger.warn('FCM ⚠️  FIREBASE_SERVICE_ACCOUNT_JSON non configuré — push désactivé');
+        return;
+      }
+      const token = await this.getFirebaseToken();
+      if (token) {
+        this.logger.log('FCM ✅ Connexion Firebase établie — push activé');
+      } else {
+        this.logger.error('FCM ❌ Token Firebase vide — vérifier FIREBASE_SERVICE_ACCOUNT_JSON');
+      }
+    } catch (e: any) {
+      this.logger.error('FCM ❌ Échec connexion Firebase', e?.message ?? e);
+    }
+  }
 
   async sendPush(userId: string, title: string, body: string, data?: any) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
