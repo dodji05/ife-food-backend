@@ -35,7 +35,10 @@ export class NotificationsService implements OnModuleInit {
 
   async sendPush(userId: string, title: string, body: string, data?: any) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.fcmToken) return;
+    if (!user?.fcmToken) {
+      this.logger.warn(`FCM push skipped — userId=${userId} : fcmToken absent (app pas encore lancée ou token non enregistré)`);
+      return;
+    }
 
     try {
       const projectId = this.config.get('FIREBASE_PROJECT_ID');
@@ -57,6 +60,7 @@ export class NotificationsService implements OnModuleInit {
           },
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        this.logger.log(`FCM push ✅ envoyé à userId=${userId} : "${title}"`);
       }
     } catch (err: unknown) {
       // Token invalide (401) ? On invalide le cache pour forcer un refresh
