@@ -83,44 +83,34 @@ export class PaymentsController {
     *{box-sizing:border-box;margin:0;padding:0}
     body{
       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-      background:${bgColor};
-      min-height:100vh;
-      display:flex;align-items:center;justify-content:center;
-      padding:24px;
+      background:${bgColor};min-height:100vh;
+      display:flex;align-items:center;justify-content:center;padding:24px;
     }
     .card{
-      background:#fff;
-      border-radius:24px;
-      padding:48px 32px 40px;
-      text-align:center;
-      max-width:400px;width:100%;
+      background:#fff;border-radius:24px;padding:48px 32px 40px;
+      text-align:center;max-width:400px;width:100%;
       box-shadow:0 8px 40px rgba(0,0,0,0.10);
     }
     .circle{
-      width:80px;height:80px;border-radius:50%;
-      background:${color};
+      width:80px;height:80px;border-radius:50%;background:${color};
       display:flex;align-items:center;justify-content:center;
-      margin:0 auto 24px;
-      font-size:36px;color:#fff;font-weight:900;
+      margin:0 auto 24px;font-size:36px;color:#fff;font-weight:900;
     }
     h1{font-size:24px;font-weight:800;color:#1a1d1b;margin-bottom:12px}
-    .sub{font-size:15px;color:#64748b;line-height:1.6;margin-bottom:8px}
-    .hint{
-      display:flex;align-items:center;justify-content:center;gap:8px;
-      margin:24px 0 32px;
-      background:#f8fafc;border-radius:12px;padding:14px 16px;
-      font-size:13px;color:#475569;font-weight:600;
+    .sub{font-size:15px;color:#64748b;line-height:1.6;margin-bottom:24px}
+    .btn{
+      display:block;width:100%;background:${color};color:#fff;
+      border:none;border-radius:14px;padding:16px;
+      font-size:16px;font-weight:700;cursor:pointer;margin-bottom:16px;
+      -webkit-tap-highlight-color:transparent;
     }
-    .arrow{font-size:20px}
+    .hint{
+      font-size:12px;color:#94a3b8;line-height:1.5;
+    }
     .badge{
-      display:inline-block;
-      background:${color}18;
-      color:${color};
-      border:1.5px solid ${color}40;
-      border-radius:10px;
-      padding:10px 16px;
-      font-size:13px;font-weight:700;
-      margin-bottom:8px;
+      display:inline-block;background:${color}18;color:${color};
+      border:1.5px solid ${color}40;border-radius:10px;
+      padding:8px 16px;font-size:12px;font-weight:700;margin-top:20px;
     }
   </style>
 </head>
@@ -130,14 +120,36 @@ export class PaymentsController {
     <h1>${title}</h1>
     <p class="sub">${message}</p>
 
-    <div class="hint">
-      <span class="arrow">&#8592;</span>
-      <span>Appuyez sur la fleche retour pour revenir dans l'application</span>
-    </div>
+    <button class="btn" id="closeBtn">Retourner dans l'application</button>
+
+    <p class="hint">
+      Si le bouton ne fonctionne pas,<br/>
+      appuyez sur le <strong>X</strong> en haut a gauche de votre navigateur.
+    </p>
 
     <div class="badge">ife FOOD</div>
-    <p style="font-size:11px;color:#94a3b8;margin-top:8px">Powered by FedaPay</p>
   </div>
+
+  <script>
+    // 1. Vider l'historique pour que le bouton retour Android ferme le navigateur
+    if (window.history && window.history.length > 1) {
+      window.history.go(1 - window.history.length);
+    }
+
+    // 2. Bouton : essaie plusieurs methodes de fermeture
+    document.getElementById('closeBtn').addEventListener('click', function() {
+      // Methode 1 : fermeture standard
+      window.close();
+      // Methode 2 : intent Android (Chrome Custom Tab)
+      setTimeout(function() {
+        window.location.href = 'intent:#Intent;action=android.intent.action.MAIN;end';
+      }, 100);
+      // Methode 3 : retour arriere maximum
+      setTimeout(function() {
+        window.history.go(-999);
+      }, 200);
+    });
+  </script>
 </body>
 </html>`;
 
