@@ -66,17 +66,17 @@ export class DriversService {
   }
 
   async updateLocation(userId: string, dto: UpdateLocationDto) {
-    // updateMany ne plante pas si aucun profil Driver n'existe encore pour ce userId.
-    const { count } = await this.prisma.driver.updateMany({
-      where: { userId },
-      data: { currentLat: dto.lat, currentLng: dto.lng },
-    });
-    if (count === 0) {
-      // Profil driver absent — on retourne une réponse vide plutôt que de crasher.
-      return { data: null };
+    try {
+      const updated = await this.prisma.driver.update({
+        where: { userId },
+        data: { currentLat: dto.lat, currentLng: dto.lng },
+      });
+      return { data: updated };
+    } catch (e: any) {
+      // P2025 = record not found : profil driver absent, on ignore silencieusement.
+      if (e?.code === 'P2025') return { data: null };
+      throw e;
     }
-    const driver = await this.prisma.driver.findUnique({ where: { userId } });
-    return { data: driver };
   }
 
   async getAvailableDrivers(lat: number, lng: number, radiusKm: number = 5) {
