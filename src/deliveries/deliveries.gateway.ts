@@ -6,6 +6,7 @@ import {
   ConnectedSocket,
   OnGatewayConnection,
   WsException,
+  Logger,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
@@ -20,6 +21,7 @@ import { WsJwtGuard } from '../common/guards/ws-jwt.guard';
 })
 export class DeliveriesGateway implements OnGatewayConnection {
   @WebSocketServer() server: Server;
+  private readonly logger = new Logger(DeliveriesGateway.name);
 
   constructor(
     private prisma: PrismaService,
@@ -40,6 +42,7 @@ export class DeliveriesGateway implements OnGatewayConnection {
     if (user?.role === 'DRIVER') {
       client.join('drivers_online');
       client.join(`driver_${user.id}`);
+      this.logger.log(`[WS] Driver connecté : userId=${user.id} socketId=${client.id}`);
     }
     // Auto-join room professional_<userId> pour broadcaster les events
     // côté pro (nouvelle commande, driver assigné, etc.) — évite au pro
