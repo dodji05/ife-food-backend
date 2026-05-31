@@ -54,6 +54,14 @@ export class PaymentsController {
     return this.paymentsService.verifyKkiapayPayment(orderId, transactionId);
   }
 
+  @Post(':orderId/check')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Unified payment status check (auto-detects gateway)' })
+  checkPayment(@Param('orderId') orderId: string) {
+    return this.paymentsService.checkPayment(orderId);
+  }
+
   @Get('gateways')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')

@@ -301,11 +301,24 @@ export class PaymentsService {
       return { data: { status: 'SUCCESS', alreadyConfirmed: true } };
     }
 
+    // Mémorise le transactionId pour permettre une re-vérification ultérieure
+    // (bouton "J'ai payé" depuis le suivi de commande) même si la 1re échoue.
+    const txId = transactionId || (payment.gatewayData as any)?.transactionId;
+    if (transactionId) {
+      await this.prisma.payment.update({
+        where: { orderId },
+        data: { gatewayData: { transactionId } as any },
+      });
+    }
+    if (!txId) {
+      return { data: { status: 'PENDING', reason: 'no_transaction_id' } };
+    }
+
     const dbCreds = await this.loadGatewayCredentials();
-    const result = await this.kkiapay.verifyTransaction(transactionId, dbCreds.KKIAPAY);
+    const result = await this.kkiapay.verifyTransaction(txId, dbCreds.KKIAPAY);
 
     if (result.status === 'SUCCESS') {
-      await this.confirmPayment(orderId, `kkiapay_${transactionId}`);
+      await this.confirmPayment(orderId, `kkiapay_${txId}`);
       return { data: { status: 'SUCCESS' } };
     }
     if (result.status === 'FAILED') {
@@ -313,6 +326,20 @@ export class PaymentsService {
       return { data: { status: 'FAILED' } };
     }
     return { data: { status: 'PENDING' } };
+  }
+
+  /**
+   * Vérification unifiée appelée depuis le suivi de commande ("J'ai payé").
+   * Détecte la passerelle et délègue à la bonne vérification.
+   */
+  async checkPayment(orderId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { orderId } });
+    if (!payment) throw new BadRequestException('Aucun paiement trouvé pour cette commande');
+    const gw = payment.gateway as string;
+    if (gw === 'FEDAPAY')  return this.checkFedapayPayment(orderId);
+    if (gw === 'KKIAPAY')  return this.verifyKkiapayPayment(orderId, '');
+    // Autres passerelles : on renvoie simplement le statut courant.
+    return { data: { status: (payment.status as string) === 'SUCCESS' ? 'SUCCESS' : 'PENDING' } };
   }
 
   async failPayment(orderId: string) {

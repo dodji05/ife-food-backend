@@ -34,17 +34,18 @@ export class KkiapayService {
     overrideConfig?: { privateKey?: string; secret?: string },
   ): Promise<{ status: string; amount?: number }> {
     const privateKey = overrideConfig?.privateKey || this.config.get('KKIAPAY_PRIVATE_KEY', '');
-    const secretKey  = overrideConfig?.secret      || this.config.get('KKIAPAY_SECRET', '');
 
     if (!privateKey || privateKey.includes('your_') || privateKey.length < 10) {
-      throw new BadRequestException('KKiaPay non configuré — renseignez KKIAPAY_PRIVATE_KEY et KKIAPAY_SECRET');
+      throw new BadRequestException('KKiaPay non configuré — renseignez KKIAPAY_PRIVATE_KEY');
     }
 
     try {
+      // Vérification serveur KKiaPay : header x-api-key = clé privée.
+      // (x-private-key/x-secret-key sont réservés au widget, pas à l'API serveur.)
       const { data } = await axios.post(
         `${this.baseUrl}/transactions/status`,
         { transactionId },
-        { headers: { 'x-private-key': privateKey, 'x-secret-key': secretKey } },
+        { headers: { 'x-api-key': privateKey } },
       );
       // KKiaPay renvoie status: SUCCESS | FAILED | PENDING (+ amount).
       return { status: (data?.status ?? 'PENDING') as string, amount: data?.amount };
