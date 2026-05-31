@@ -34,9 +34,17 @@ export class NotificationsService implements OnModuleInit {
   }
 
   async sendPush(userId: string, title: string, body: string, data?: any) {
+    // 1. Persistance DB systématique — la notification interne (badge + liste
+    // in-app) DOIT toujours être créée, indépendamment du push FCM réseau.
+    // (Bug corrigé : un return anticipé sur fcmToken absent sautait la création.)
+    await this.prisma.notification.create({
+      data: { userId, type: 'SYSTEM', title, body, data },
+    }).catch((e) => this.logger.error('DB notification create failed', e?.message ?? e));
+
+    // 2. Push FCM — best-effort. Si l'utilisateur n'a pas de token, on s'arrête là.
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user?.fcmToken) {
-      this.logger.warn(`FCM push skipped — userId=${userId} : fcmToken absent (app pas encore lancée ou token non enregistré)`);
+      this.logger.warn(`FCM push skipped — userId=${userId} : fcmToken absent (notif interne créée quand même)`);
       return;
     }
 
@@ -72,12 +80,6 @@ export class NotificationsService implements OnModuleInit {
       }
       this.logger.error('FCM push failed', err instanceof Error ? err.message : String(err));
     }
-
-    // Persistance DB systématique — même si le push réseau échoue, l'utilisateur
-    // verra la notif au prochain GET /notifications (et badge in-app).
-    await this.prisma.notification.create({
-      data: { userId, type: 'SYSTEM', title, body, data },
-    });
   }
 
   async sendOrderNotification(orderId: string, status: string) {
