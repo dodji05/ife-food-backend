@@ -99,9 +99,35 @@ export class PaymentsService {
       case PaymentGatewayName.PAYPAL:
         paymentData = await this.paypal.createOrder(order.totalAmount, order.currency, orderId);
         break;
-      case PaymentGatewayName.KKIAPAY:
-        paymentData = await this.kkiapay.initiatePayment(order.totalAmount, order.currency, orderId, order.client.phone, dbCreds.KKIAPAY);
-        break;
+      case PaymentGatewayName.KKIAPAY: {
+        const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
+        const gateways = (platformCfg?.value as any) ?? {};
+        if (gateways.KKIAPAY === false) throw new BadRequestException('KKiaPay n\'est pas disponible');
+        // KKiaPay n'a pas d'initiation serveur : on crée un paiement PENDING
+        // et on renvoie la config publique au widget mobile, qui collectera le
+        // paiement puis renverra un transactionId à vérifier (verifyKkiapayPayment).
+        const pub = this.kkiapay.getPublicConfig(dbCreds.KKIAPAY);
+        if (!pub.publicKey) throw new BadRequestException('Clé publique KKiaPay manquante (KKIAPAY_PUBLIC_KEY)');
+        await this.prisma.payment.upsert({
+          where: { orderId },
+          update: { status: 'PENDING' as any },
+          create: { orderId, gateway: 'KKIAPAY' as any, amount: order.totalAmount, currency: order.currency, gatewayRef: `kkiapay_pending_${orderId}`, status: 'PENDING' as any },
+        });
+        return {
+          data: {
+            method:    'KKIAPAY',
+            widget:    true,           // signale au mobile d'ouvrir le widget natif
+            orderId,
+            publicKey: pub.publicKey,
+            sandbox:   pub.sandbox,
+            amount:    order.totalAmount,
+            phone:     order.client.phone,
+            name:      order.client.name ?? order.client.phone,
+            email:     order.client.email,
+            currency:  order.currency,
+          },
+        };
+      }
       case PaymentGatewayName.FEDAPAY: {
         const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
         const gateways = (platformCfg?.value as any) ?? {};
@@ -256,6 +282,33 @@ export class PaymentsService {
       return { data: { status: 'SUCCESS' } };
     }
     if (status === 'declined' || status === 'canceled') {
+      await this.failPayment(orderId);
+      return { data: { status: 'FAILED' } };
+    }
+    return { data: { status: 'PENDING' } };
+  }
+
+  /**
+   * Vérifie une transaction KKiaPay (transactionId renvoyé par le widget mobile)
+   * et confirme la commande si le paiement est SUCCESS.
+   */
+  async verifyKkiapayPayment(orderId: string, transactionId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { orderId } });
+    if (!payment || (payment.gateway as string) !== 'KKIAPAY') {
+      throw new BadRequestException('Aucun paiement KKiaPay trouvé pour cette commande');
+    }
+    if ((payment.status as string) === 'SUCCESS') {
+      return { data: { status: 'SUCCESS', alreadyConfirmed: true } };
+    }
+
+    const dbCreds = await this.loadGatewayCredentials();
+    const result = await this.kkiapay.verifyTransaction(transactionId, dbCreds.KKIAPAY);
+
+    if (result.status === 'SUCCESS') {
+      await this.confirmPayment(orderId, `kkiapay_${transactionId}`);
+      return { data: { status: 'SUCCESS' } };
+    }
+    if (result.status === 'FAILED') {
       await this.failPayment(orderId);
       return { data: { status: 'FAILED' } };
     }

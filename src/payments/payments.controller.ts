@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Headers, Req, Res, Query, UseGuards, Header } from '@nestjs/common';
+import { Controller, Post, Get, Param, Headers, Req, Res, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
@@ -41,6 +41,17 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Manually check FedaPay transaction status and confirm if approved' })
   checkFedapay(@Param('orderId') orderId: string) {
     return this.paymentsService.checkFedapayPayment(orderId);
+  }
+
+  @Post(':orderId/verify-kkiapay/:transactionId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Verify a KKiaPay transaction (from mobile widget) and confirm payment' })
+  verifyKkiapay(
+    @Param('orderId') orderId: string,
+    @Param('transactionId') transactionId: string,
+  ) {
+    return this.paymentsService.verifyKkiapayPayment(orderId, transactionId);
   }
 
   @Get('gateways')

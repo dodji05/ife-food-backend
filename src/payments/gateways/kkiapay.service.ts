@@ -4,21 +4,35 @@ import axios from 'axios';
 
 @Injectable()
 export class KkiapayService {
-  // Un seul endpoint (prod + sandbox) — le mode est passé dans le body.
-  // api-sandbox.kkiapay.me retournait 404 : l'API KKiaPay utilise toujours
-  // api.kkiapay.me/api/v1 et différencie sandbox via le paramètre mode.
+  // KKiaPay n'a PAS d'API d'initiation serveur-à-serveur : le paiement passe
+  // obligatoirement par le widget côté mobile (clé publique). Le serveur ne
+  // fait que VÉRIFIER la transaction après coup via /api/v1/transactions/status
+  // avec la clé privée + secret.
   private baseUrl = 'https://api.kkiapay.me/api/v1';
 
   constructor(private config: ConfigService) {}
 
-  async initiatePayment(
-    amount: number, currency: string, orderId: string, phone: string,
-    overrideConfig?: { privateKey?: string; secret?: string; sandbox?: boolean },
-  ) {
-    const isSandbox = overrideConfig?.sandbox !== undefined
+  /**
+   * Renvoie la config publique nécessaire au widget mobile (clé publique +
+   * mode sandbox). La clé privée/secret reste côté serveur.
+   */
+  getPublicConfig(overrideConfig?: { publicKey?: string; sandbox?: boolean }) {
+    const sandbox = overrideConfig?.sandbox !== undefined
       ? overrideConfig.sandbox
       : this.config.get('KKIAPAY_SANDBOX', 'true') === 'true';
+    const publicKey = overrideConfig?.publicKey || this.config.get('KKIAPAY_PUBLIC_KEY', '');
+    return { publicKey, sandbox };
+  }
 
+  /**
+   * Vérifie le statut d'une transaction KKiaPay via son transactionId
+   * (retourné par le widget côté mobile). Retourne le statut brut :
+   * SUCCESS | FAILED | PENDING.
+   */
+  async verifyTransaction(
+    transactionId: string,
+    overrideConfig?: { privateKey?: string; secret?: string },
+  ): Promise<{ status: string; amount?: number }> {
     const privateKey = overrideConfig?.privateKey || this.config.get('KKIAPAY_PRIVATE_KEY', '');
     const secretKey  = overrideConfig?.secret      || this.config.get('KKIAPAY_SECRET', '');
 
@@ -27,21 +41,13 @@ export class KkiapayService {
     }
 
     try {
-      // KKiaPay utilise toujours api.kkiapay.me/api/v1 — le mode sandbox
-      // est passé via le paramètre "mode" dans le body (pas via un sous-domaine).
-      const { data } = await axios.post(`${this.baseUrl}/payments/request`, {
-        amount,
-        currency,
-        reason: `Order ${orderId}`,
-        phone,
-        mode: isSandbox ? 'SANDBOX' : 'LIVE',
-      }, {
-        headers: {
-          'x-private-key': privateKey,
-          'x-secret-key':  secretKey,
-        },
-      });
-      return data;
+      const { data } = await axios.post(
+        `${this.baseUrl}/transactions/status`,
+        { transactionId },
+        { headers: { 'x-private-key': privateKey, 'x-secret-key': secretKey } },
+      );
+      // KKiaPay renvoie status: SUCCESS | FAILED | PENDING (+ amount).
+      return { status: (data?.status ?? 'PENDING') as string, amount: data?.amount };
     } catch (e: any) {
       const msg = e?.response?.data?.message
         ?? JSON.stringify(e?.response?.data)
