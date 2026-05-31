@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
 @Injectable()
 export class KkiapayService {
+  private readonly logger = new Logger(KkiapayService.name);
   // KKiaPay n'a PAS d'API d'initiation serveur-à-serveur : le paiement passe
   // obligatoirement par le widget côté mobile (clé publique). Le serveur ne
   // fait que VÉRIFIER la transaction après coup via /api/v1/transactions/status
@@ -31,25 +32,35 @@ export class KkiapayService {
    */
   async verifyTransaction(
     transactionId: string,
-    overrideConfig?: { privateKey?: string; secret?: string },
+    overrideConfig?: { publicKey?: string; privateKey?: string; secret?: string },
   ): Promise<{ status: string; amount?: number }> {
+    const publicKey  = overrideConfig?.publicKey  || this.config.get('KKIAPAY_PUBLIC_KEY', '');
     const privateKey = overrideConfig?.privateKey || this.config.get('KKIAPAY_PRIVATE_KEY', '');
+    const secretKey  = overrideConfig?.secret      || this.config.get('KKIAPAY_SECRET', '');
 
     if (!privateKey || privateKey.includes('your_') || privateKey.length < 10) {
-      throw new BadRequestException('KKiaPay non configuré — renseignez KKIAPAY_PRIVATE_KEY');
+      throw new BadRequestException('KKiaPay non configuré — renseignez les clés KKiaPay');
     }
 
     try {
-      // Vérification serveur KKiaPay : header x-api-key = clé privée.
-      // (x-private-key/x-secret-key sont réservés au widget, pas à l'API serveur.)
+      // Le SDK serveur officiel KKiaPay envoie les TROIS clés ensemble :
+      //   x-api-key = clé publique · x-private-key = clé privée · x-secret-key = secret
       const { data } = await axios.post(
         `${this.baseUrl}/transactions/status`,
         { transactionId },
-        { headers: { 'x-api-key': privateKey } },
+        { headers: {
+          'x-api-key':     publicKey,
+          'x-private-key': privateKey,
+          'x-secret-key':  secretKey,
+        } },
       );
-      // KKiaPay renvoie status: SUCCESS | FAILED | PENDING (+ amount).
-      return { status: (data?.status ?? 'PENDING') as string, amount: data?.amount };
+      // Log de diagnostic : réponse brute KKiaPay pour comprendre le format.
+      this.logger.log(`KKiaPay verify txId=${transactionId} → ${JSON.stringify(data)}`);
+      // Le statut peut arriver en majuscules ou minuscules selon l'API.
+      const rawStatus = String(data?.status ?? data?.state ?? 'PENDING').toUpperCase();
+      return { status: rawStatus, amount: data?.amount };
     } catch (e: any) {
+      this.logger.error(`KKiaPay verify échec txId=${transactionId} : ${JSON.stringify(e?.response?.data) ?? e?.message}`);
       const msg = e?.response?.data?.message
         ?? JSON.stringify(e?.response?.data)
         ?? e?.message
