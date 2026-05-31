@@ -103,6 +103,17 @@ export class NotificationsService implements OnModuleInit {
     if (!msg) return;
 
     await Promise.all(msg.recipients.map((uid) => this.sendPush(uid, msg.title, msg.body, { orderId, status })));
+
+    // Notification dédiée au pro à la livraison (message adapté, distinct du
+    // "Bonne dégustation" client) pour qu'il puisse clôturer son suivi.
+    if (status === 'DELIVERED') {
+      await this.sendPush(
+        order.professional.userId,
+        'Commande livrée',
+        `La commande #${order.id.slice(-6).toUpperCase()} a été livrée au client.`,
+        { orderId, status },
+      );
+    }
   }
 
   /** Push FCM ciblé sur un driver pour une nouvelle mission. */
