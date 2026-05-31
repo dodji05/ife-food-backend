@@ -7,9 +7,11 @@ export class KkiapayService {
   private readonly logger = new Logger(KkiapayService.name);
   // KKiaPay n'a PAS d'API d'initiation serveur-à-serveur : le paiement passe
   // obligatoirement par le widget côté mobile (clé publique). Le serveur ne
-  // fait que VÉRIFIER la transaction après coup via /api/v1/transactions/status
-  // avec la clé privée + secret.
-  private baseUrl = 'https://api.kkiapay.me/api/v1';
+  // fait que VÉRIFIER la transaction après coup via /api/v1/transactions/status.
+  // ⚠️ L'URL dépend du mode : une transaction sandbox DOIT être vérifiée sur
+  // api-sandbox.kkiapay.me, sinon "Invalid API KEY".
+  private readonly liveUrl    = 'https://api.kkiapay.me/api/v1';
+  private readonly sandboxUrl = 'https://api-sandbox.kkiapay.me/api/v1';
 
   constructor(private config: ConfigService) {}
 
@@ -32,21 +34,26 @@ export class KkiapayService {
    */
   async verifyTransaction(
     transactionId: string,
-    overrideConfig?: { publicKey?: string; privateKey?: string; secret?: string },
+    overrideConfig?: { publicKey?: string; privateKey?: string; secret?: string; sandbox?: boolean },
   ): Promise<{ status: string; amount?: number }> {
     const publicKey  = overrideConfig?.publicKey  || this.config.get('KKIAPAY_PUBLIC_KEY', '');
     const privateKey = overrideConfig?.privateKey || this.config.get('KKIAPAY_PRIVATE_KEY', '');
     const secretKey  = overrideConfig?.secret      || this.config.get('KKIAPAY_SECRET', '');
+    const sandbox    = overrideConfig?.sandbox !== undefined
+      ? overrideConfig.sandbox
+      : this.config.get('KKIAPAY_SANDBOX', 'true') === 'true';
 
     if (!privateKey || privateKey.includes('your_') || privateKey.length < 10) {
       throw new BadRequestException('KKiaPay non configuré — renseignez les clés KKiaPay');
     }
 
+    const baseUrl = sandbox ? this.sandboxUrl : this.liveUrl;
+
     try {
       // Le SDK serveur officiel KKiaPay envoie les TROIS clés ensemble :
       //   x-api-key = clé publique · x-private-key = clé privée · x-secret-key = secret
       const { data } = await axios.post(
-        `${this.baseUrl}/transactions/status`,
+        `${baseUrl}/transactions/status`,
         { transactionId },
         { headers: {
           'x-api-key':     publicKey,
