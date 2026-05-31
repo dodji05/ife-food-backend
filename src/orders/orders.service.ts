@@ -23,6 +23,7 @@ export class OrdersService {
     timeoutHandle: ReturnType<typeof setTimeout>;
     triedUserIds:  Set<string>;
     retryCount:    number;
+    expiresAt:     number; // timestamp ms de fin de la fenêtre d'acceptation
   }>();
   private readonly MAX_DISPATCH_RETRIES = 3;
 
@@ -179,10 +180,90 @@ export class OrdersService {
         this.dispatchNewMission(orderId, newTriedUserIds, retryCount + 1);
       }, timeoutSeconds * 1000);
 
-      this.pendingDispatches.set(orderId, { timeoutHandle, triedUserIds: newTriedUserIds, retryCount });
+      this.pendingDispatches.set(orderId, {
+        timeoutHandle, triedUserIds: newTriedUserIds, retryCount,
+        expiresAt: Date.now() + timeoutSeconds * 1000,
+      });
     } catch (e) {
       this.logger.error(`[dispatch] Erreur: ${e}`);
     }
+  }
+
+  /**
+   * Missions actuellement disponibles pour un livreur (fenêtre d'acceptation
+   * encore ouverte). Mêmes filtres d'éligibilité que dispatchNewMission.
+   * Renvoie aussi `remainingSeconds` pour le compte à rebours côté mobile.
+   */
+  async getAvailableMissions(driverUserId: string) {
+    const now = Date.now();
+    // OrderIds encore dans leur fenêtre d'acceptation.
+    const openOrderIds = [...this.pendingDispatches.entries()]
+      .filter(([, s]) => s.expiresAt > now)
+      .map(([orderId]) => orderId);
+    if (openOrderIds.length === 0) return { data: [] };
+
+    const driver = await this.prisma.driver.findUnique({ where: { userId: driverUserId } });
+    if (!driver || driver.status !== 'ONLINE' || !driver.isAvailable) return { data: [] };
+
+    const orders = await this.prisma.order.findMany({
+      where: { id: { in: openOrderIds }, driverId: null, status: 'READY_FOR_PICKUP' as any },
+      include: {
+        professional: { select: { businessName: true, address: true, phone: true, lat: true, lng: true, city: true } },
+        items: { include: { product: true } },
+      },
+    });
+
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+      const dLat = toRad(lat2 - lat1); const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+      return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    };
+
+    const result = orders
+      .filter((order) => {
+        // Même filtre distance que le dispatch (≤ 20 km du pro).
+        if (driver.currentLat != null && driver.currentLng != null &&
+            haversine(driver.currentLat, driver.currentLng, order.professional.lat, order.professional.lng) > 20) {
+          return false;
+        }
+        // Filtre zone : la ville du pro doit correspondre à la zone du livreur.
+        const proCity = order.professional.city?.toLowerCase() ?? '';
+        if ((driver as any).zoneCity && proCity && (driver as any).zoneCity.toLowerCase() !== proCity) {
+          return false;
+        }
+        return true;
+      })
+      .map((order) => {
+        const distanceKm = haversine(
+          order.professional.lat, order.professional.lng,
+          order.deliveryLat, order.deliveryLng,
+        );
+        const distanceToPickupKm = (driver.currentLat != null && driver.currentLng != null)
+          ? haversine(driver.currentLat, driver.currentLng, order.professional.lat, order.professional.lng)
+          : null;
+        const state = this.pendingDispatches.get(order.id);
+        const remainingSeconds = state ? Math.max(0, Math.round((state.expiresAt - now) / 1000)) : 0;
+        return {
+          orderId:             order.id,
+          professionalName:    order.professional.businessName,
+          professionalAddress: order.professional.address,
+          professionalPhone:   order.professional.phone ?? '',
+          professionalLat:     order.professional.lat,
+          professionalLng:     order.professional.lng,
+          deliveryAddress:     order.deliveryAddress,
+          deliveryLat:         order.deliveryLat,
+          deliveryLng:         order.deliveryLng,
+          deliveryFee:         order.deliveryFee,
+          currency:            order.currency,
+          distanceKm,
+          distanceToPickupKm,
+          remainingSeconds,
+          items:               order.items,
+        };
+      });
+
+    return { data: result };
   }
 
   /** Refus explicite d'un driver → réattribution immédiate aux drivers restants. */

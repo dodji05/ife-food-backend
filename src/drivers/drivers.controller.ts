@@ -40,6 +40,12 @@ export class DriversController {
     return this.driversService.getActiveMissions(user.id);
   }
 
+  @Get('me/available-missions')
+  @ApiOperation({ summary: 'List missions available to accept (acceptance window still open)' })
+  getAvailableMissions(@CurrentUser() user: any) {
+    return this.ordersService.getAvailableMissions(user.id);
+  }
+
   @Get('me/earnings')
   @ApiOperation({ summary: 'List driver earnings' })
   getEarnings(@CurrentUser() user: any) {
