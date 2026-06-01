@@ -10,6 +10,11 @@ export class StripeService {
     this.stripe = new Stripe(config.get('STRIPE_SECRET_KEY', ''), { apiVersion: '2023-08-16' });
   }
 
+  /** Clé publishable (mobile) — exposée au client pour la PaymentSheet. */
+  getPublishableKey(override?: string): string {
+    return override || this.config.get('STRIPE_PUBLISHABLE_KEY', '');
+  }
+
   async createPaymentIntent(amount: number, currency: string, orderId: string) {
     return this.stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // cents
@@ -25,6 +30,12 @@ export class StripeService {
     } catch {
       throw new BadRequestException('Invalid Stripe webhook signature');
     }
+  }
+
+  /** Statut d'un PaymentIntent : succeeded | processing | requires_* | canceled. */
+  async retrievePaymentIntentStatus(paymentIntentId: string): Promise<string> {
+    const pi = await this.stripe.paymentIntents.retrieve(paymentIntentId);
+    return pi.status;
   }
 
   async refund(paymentIntentId: string, amount: number) {

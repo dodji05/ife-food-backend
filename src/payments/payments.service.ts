@@ -93,9 +93,27 @@ export class PaymentsService {
     const dbCreds = await this.loadGatewayCredentials();
 
     switch (gw) {
-      case PaymentGatewayName.STRIPE:
-        paymentData = await this.stripe.createPaymentIntent(order.totalAmount, order.currency, orderId);
-        break;
+      case PaymentGatewayName.STRIPE: {
+        const intent = await this.stripe.createPaymentIntent(order.totalAmount, order.currency, orderId);
+        const publishableKey = this.stripe.getPublishableKey(dbCreds.STRIPE?.publishableKey);
+        await this.prisma.payment.upsert({
+          where: { orderId },
+          update: { gatewayRef: intent.id, gatewayData: intent as any, status: 'PENDING' as any },
+          create: { orderId, gateway: 'STRIPE' as any, amount: order.totalAmount, currency: order.currency, gatewayRef: intent.id, gatewayData: intent as any, status: 'PENDING' as any },
+        });
+        // Réponse structurée pour la PaymentSheet mobile (flutter_stripe).
+        return {
+          data: {
+            method:         'STRIPE',
+            stripe:         true,
+            orderId,
+            clientSecret:   intent.client_secret,
+            publishableKey,
+            amount:         order.totalAmount,
+            currency:       order.currency,
+          },
+        };
+      }
       case PaymentGatewayName.PAYPAL:
         paymentData = await this.paypal.createOrder(order.totalAmount, order.currency, orderId);
         break;
@@ -338,6 +356,22 @@ export class PaymentsService {
     const gw = payment.gateway as string;
     if (gw === 'FEDAPAY')  return this.checkFedapayPayment(orderId);
     if (gw === 'KKIAPAY')  return this.verifyKkiapayPayment(orderId, '');
+    if (gw === 'STRIPE') {
+      if ((payment.status as string) === 'SUCCESS') {
+        return { data: { status: 'SUCCESS', alreadyConfirmed: true } };
+      }
+      if (!payment.gatewayRef) return { data: { status: 'PENDING' } };
+      const status = await this.stripe.retrievePaymentIntentStatus(payment.gatewayRef);
+      if (status === 'succeeded') {
+        await this.confirmPayment(orderId, payment.gatewayRef);
+        return { data: { status: 'SUCCESS' } };
+      }
+      if (status === 'canceled') {
+        await this.failPayment(orderId);
+        return { data: { status: 'FAILED' } };
+      }
+      return { data: { status: 'PENDING' } };
+    }
     // Autres passerelles : on renvoie simplement le statut courant.
     return { data: { status: (payment.status as string) === 'SUCCESS' ? 'SUCCESS' : 'PENDING' } };
   }
