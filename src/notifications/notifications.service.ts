@@ -102,7 +102,10 @@ export class NotificationsService implements OnModuleInit {
     const msg = statusMessages[status];
     if (!msg) return;
 
-    await Promise.all(msg.recipients.map((uid) => this.sendPush(uid, msg.title, msg.body, { orderId, status })));
+    // PAID (nouvelle commande reçue par le pro) → canal popup heads-up dédié.
+    // Les autres statuts restent sur le canal standard.
+    const channelId = status === 'PAID' ? 'ife_pro_orders_v1' : 'ife_orders';
+    await Promise.all(msg.recipients.map((uid) => this.sendPush(uid, msg.title, msg.body, { orderId, status }, channelId)));
 
     // Notification dédiée au pro à la livraison (message adapté, distinct du
     // "Bonne dégustation" client) pour qu'il puisse clôturer son suivi.
