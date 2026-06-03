@@ -33,7 +33,7 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
-  async sendPush(userId: string, title: string, body: string, data?: any) {
+  async sendPush(userId: string, title: string, body: string, data?: any, channelId = 'ife_orders') {
     // 1. Persistance DB systématique — la notification interne (badge + liste
     // in-app) DOIT toujours être créée, indépendamment du push FCM réseau.
     // (Bug corrigé : un return anticipé sur fcmToken absent sautait la création.)
@@ -62,7 +62,7 @@ export class NotificationsService implements OnModuleInit {
               notification: { title, body },
               data: data ? Object.fromEntries(Object.entries(data).map(([k,v]) => [k, String(v)])) : {},
               // Hint Android : channel à créer côté mobile (cf. FcmService).
-              android: { priority: 'HIGH', notification: { channel_id: 'ife_orders' } },
+              android: { priority: 'HIGH', notification: { channel_id: channelId } },
               apns: { headers: { 'apns-priority': '10' }, payload: { aps: { sound: 'default' } } },
             },
           },
@@ -141,7 +141,7 @@ export class NotificationsService implements OnModuleInit {
       distanceKm:           String(mission.distanceKm),
       distanceToPickupKm:   mission.distanceToPickupKm != null ? String(mission.distanceToPickupKm) : '',
       deliveryZone:         mission.deliveryZone,
-    });
+    }, 'ife_missions_v2'); // canal MAX → popup heads-up prioritaire livreur
   }
 
   async sendToAllUsers(title: string, body: string, role?: string, countries?: string[]) {
