@@ -1,13 +1,64 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class MessagesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(MessagesService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async sendMessage(senderId: string, conversationId: string, content: string) {
     const sanitized = content.replace(/(\+?\d[\d\s\-()]{8,}\d)/g, '[numéro masqué]');
-    return this.prisma.message.create({ data: { conversationId, senderId, content: sanitized } });
+    const message = await this.prisma.message.create({
+      data: { conversationId, senderId, content: sanitized },
+    });
+
+    // Notification push au(x) destinataire(s) — même app fermée. Best-effort.
+    this.notifyRecipients(senderId, conversationId, sanitized).catch((e) =>
+      this.logger.error('Message push failed', e?.message ?? e),
+    );
+
+    return message;
+  }
+
+  /** Envoie un push aux participants de la conversation autres que l'expéditeur. */
+  private async notifyRecipients(senderId: string, conversationId: string, content: string) {
+    const orderId = conversationId.replace(/^order_/, '');
+    if (!orderId) return;
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        clientId: true,
+        driver:       { select: { userId: true } },
+        professional: { select: { userId: true } },
+      },
+    });
+    if (!order) return;
+
+    // Participants = client + livreur + pro ; on retire l'expéditeur et les nuls.
+    const recipients = [order.clientId, order.driver?.userId, order.professional?.userId]
+      .filter((uid): uid is string => !!uid && uid !== senderId);
+    if (recipients.length === 0) return;
+
+    const sender = await this.prisma.user.findUnique({
+      where: { id: senderId },
+      select: { name: true, firstName: true },
+    });
+    const senderName = [sender?.firstName, sender?.name].filter(Boolean).join(' ') || 'Nouveau message';
+    const preview = content.length > 80 ? `${content.slice(0, 77)}…` : content;
+
+    await Promise.all(recipients.map((uid) =>
+      this.notifications.sendPush(uid, senderName, preview, {
+        type: 'NEW_MESSAGE',
+        conversationId,
+        orderId,
+      }, 'ife_messages_chat'),
+    ));
   }
 
   async getConversation(conversationId: string, _userId: string) {
