@@ -23,13 +23,18 @@ export class TasksService {
       // Ignorer si la clé est absente ou contient encore la valeur placeholder
       if (!apiKey || apiKey.includes('your_') || apiKey.length < 10) return;
 
+      // Devises cibles explicites : paires utiles pour la diaspora + Afrique de l'Ouest.
+      // On ne fait PAS de slice(0, 20) — conversion_rates est trié alphabétiquement
+      // et les devises importantes (EUR, USD, GBP…) seraient hors des 20 premières.
+      const TARGET_CURRENCIES = ['XOF', 'EUR', 'USD', 'GBP', 'CAD', 'CHF', 'MAD', 'DZD', 'TND', 'NGN', 'GHS', 'XAF'];
       const baseCurrencies = ['XOF', 'EUR', 'USD', 'GBP'];
+
       for (const base of baseCurrencies) {
-        const { data } = await axios.get(
-          `${apiUrl}/${apiKey}/latest/${base}`
-        );
-        const targets = Object.entries(data.conversion_rates) as [string, number][];
-        for (const [to, rate] of targets.slice(0, 20)) {
+        const { data } = await axios.get(`${apiUrl}/${apiKey}/latest/${base}`);
+        const rates = data.conversion_rates as Record<string, number>;
+        for (const to of TARGET_CURRENCIES) {
+          if (to === base || !(to in rates)) continue;
+          const rate = rates[to];
           await this.prisma.exchangeRate.upsert({
             where: { fromCurrency_toCurrency: { fromCurrency: base, toCurrency: to } },
             update: { rate },
