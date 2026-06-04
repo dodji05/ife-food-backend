@@ -15,14 +15,18 @@ export class TasksService {
   async refreshExchangeRates() {
     this.logger.log('🔄 Refreshing exchange rates...');
     try {
-      const apiKey = this.config.get('EXCHANGE_RATE_API_KEY');
+      // Clé + URL : priorité config admin (DB), fallback .env.
+      const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'exchangeRateCredentials' } });
+      const raw = (cfg?.value as any) ?? {};
+      const apiKey = raw.apiKey || this.config.get('EXCHANGE_RATE_API_KEY');
+      const apiUrl = raw.apiUrl || this.config.get('EXCHANGE_RATE_API_URL', 'https://v6.exchangerate-api.com/v6');
       // Ignorer si la clé est absente ou contient encore la valeur placeholder
       if (!apiKey || apiKey.includes('your_') || apiKey.length < 10) return;
 
       const baseCurrencies = ['XOF', 'EUR', 'USD', 'GBP'];
       for (const base of baseCurrencies) {
         const { data } = await axios.get(
-          `${this.config.get('EXCHANGE_RATE_API_URL')}/${apiKey}/latest/${base}`
+          `${apiUrl}/${apiKey}/latest/${base}`
         );
         const targets = Object.entries(data.conversion_rates) as [string, number][];
         for (const [to, rate] of targets.slice(0, 20)) {

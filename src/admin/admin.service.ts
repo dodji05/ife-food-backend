@@ -1377,6 +1377,37 @@ export class AdminService {
     return { success: true };
   }
 
+  // ─── EXCHANGE RATE (taux de change) ──────────────────────────
+  async getExchangeRateCredentials() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'exchangeRateCredentials' } });
+    const raw = (cfg?.value as any) ?? {};
+    return {
+      data: {
+        apiKey: raw.apiKey ? this.maskSecret(raw.apiKey) : '',
+        apiUrl: raw.apiUrl ?? 'https://v6.exchangerate-api.com/v6',
+      },
+    };
+  }
+
+  async setExchangeRateCredentials(body: { apiKey?: string; apiUrl?: string }) {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'exchangeRateCredentials' } });
+    const existing: any = (cfg?.value as any) ?? {};
+    const merged: any = { ...existing };
+    // '__keep__' = ne pas écraser (champ masqué laissé tel quel côté UI).
+    if (body.apiKey !== undefined && body.apiKey !== '__keep__' && body.apiKey !== '') {
+      merged.apiKey = body.apiKey;
+    }
+    if (body.apiUrl !== undefined && body.apiUrl !== '') {
+      merged.apiUrl = body.apiUrl;
+    }
+    await this.prisma.platformConfig.upsert({
+      where: { key: 'exchangeRateCredentials' },
+      update: { value: merged },
+      create: { key: 'exchangeRateCredentials', value: merged },
+    });
+    return { success: true };
+  }
+
   // ─── PROMO CODES ──────────────────────────
   async getPromoCodes() {
     return this.prisma.promoCode.findMany({

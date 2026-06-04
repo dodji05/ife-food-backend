@@ -211,14 +211,28 @@ export class GeoService {
       .sort((a, b) => a.distance - b.distance);
   }
 
+  /**
+   * Clé + URL Exchange Rate : priorité à la config admin (DB), fallback .env.
+   * Centralisé ici, réutilisé par TasksService.
+   */
+  async getExchangeRateConfig(): Promise<{ apiKey: string; apiUrl: string }> {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'exchangeRateCredentials' } });
+    const raw = (cfg?.value as any) ?? {};
+    return {
+      apiKey: raw.apiKey || this.config.get('EXCHANGE_RATE_API_KEY', ''),
+      apiUrl: raw.apiUrl || this.config.get('EXCHANGE_RATE_API_URL', 'https://v6.exchangerate-api.com/v6'),
+    };
+  }
+
   async getExchangeRate(from: string, to: string): Promise<number> {
     if (from === to) return 1;
     try {
       const cached = await this.prisma.exchangeRate.findUnique({ where: { fromCurrency_toCurrency: { fromCurrency: from, toCurrency: to } } });
       if (cached && new Date().getTime() - cached.updatedAt.getTime() < 24 * 60 * 60 * 1000) return Number(cached.rate);
 
-      const apiKey = this.config.get('EXCHANGE_RATE_API_KEY');
-      const { data } = await axios.get(`${this.config.get('EXCHANGE_RATE_API_URL')}/${apiKey}/latest/${from}`);
+      const { apiKey, apiUrl } = await this.getExchangeRateConfig();
+      if (!apiKey || apiKey.includes('your_')) return cached ? Number(cached.rate) : 1;
+      const { data } = await axios.get(`${apiUrl}/${apiKey}/latest/${from}`);
       const rate = data.conversion_rates[to];
 
       await this.prisma.exchangeRate.upsert({

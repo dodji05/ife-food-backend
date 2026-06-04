@@ -256,6 +256,16 @@ export class AdminController {
   @AdminLevel('SUPER_ADMIN')
   setMapsCredentials(@Body() body: any) { return this.adminService.setMapsCredentials(body); }
 
+  @Get('config/exchange-rate-credentials')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  getExchangeRateCredentials() { return this.adminService.getExchangeRateCredentials(); }
+
+  @Put('config/exchange-rate-credentials')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  setExchangeRateCredentials(@Body() body: any) { return this.adminService.setExchangeRateCredentials(body); }
+
   @Get('config/delivery-mode')
   getDeliveryModeConfig() { return this.adminService.getDeliveryModeConfig(); }
 
