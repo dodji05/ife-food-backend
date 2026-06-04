@@ -484,7 +484,7 @@ export class OrdersService {
         where: { clientId },
         include: {
           professional: { select: { businessName: true, logoUrl: true } },
-          items: true,
+          items: { include: { product: true } },
           review: { select: { id: true } },
         },
         orderBy: { createdAt: 'desc' },
