@@ -421,21 +421,20 @@ export class DriversService {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) return;
 
-    // Credit driver delivery fee
+    // DELIVERY_FEE du livreur — créditée à la livraison effective
     await this.prisma.transaction.create({
-      data: { driverId, type: 'DELIVERY_FEE', amount: order.deliveryFee, currency: order.currency, status: 'COMPLETED', description: `Delivery for order ${orderId}` },
+      data: {
+        driverId,
+        type:        'DELIVERY_FEE' as any,
+        amount:      order.deliveryFee,
+        currency:    order.currency,
+        status:      'COMPLETED' as any,
+        description: `Delivery for order ${orderId}`,
+      },
     });
 
-    // Credit professional (total - commission)
-    const profAmount = order.subtotal - order.commissionAmount;
-    await this.prisma.transaction.create({
-      data: { professionalId: order.professionalId, type: 'PAYOUT', amount: profAmount, currency: order.currency, status: 'PENDING', description: `Revenue for order ${orderId}` },
-    });
-
-    // Platform commission
-    await this.prisma.transaction.create({
-      data: { type: 'COMMISSION', amount: order.commissionAmount, currency: order.currency, status: 'COMPLETED', description: `Commission for order ${orderId}` },
-    });
+    // PAYOUT pro + COMMISSION plateforme sont créés dès le paiement
+    // (PaymentsService.applyProCommissionOnPayment). Ne pas dupliquer ici.
   }
 
   // ── Sélection de zones (zones créées par l'admin) ────────────────────────

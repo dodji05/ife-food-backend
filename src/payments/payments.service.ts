@@ -245,6 +245,55 @@ export class PaymentsService {
       .findUnique({ where: { id: orderId }, select: { clientId: true } })
       .then(o => { if (o) this.grantReferralReward(o.clientId).catch(() => {}); })
       .catch(() => {});
+
+    // Commission pro — enregistrée dès le paiement (best-effort, ne bloque pas)
+    this.applyProCommissionOnPayment(orderId).catch(() => {});
+  }
+
+  /**
+   * Crée les transactions PAYOUT (pro) et COMMISSION (plateforme) dès que le
+   * paiement est confirmé. Le PAYOUT reste PENDING jusqu'au versement admin.
+   * La DELIVERY_FEE du livreur est créée séparément à la livraison.
+   */
+  private async applyProCommissionOnPayment(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return;
+    if (!order.commissionAmount && order.commissionAmount !== 0) return;
+
+    // Éviter les doublons si le webhook est rejoué
+    const existing = await this.prisma.transaction.findFirst({
+      where: { OR: [
+        { type: 'PAYOUT' as any,     description: { contains: orderId } },
+        { type: 'COMMISSION' as any, description: { contains: orderId } },
+      ]},
+    });
+    if (existing) return;
+
+    const profAmount = Number(order.subtotal) - Number(order.commissionAmount);
+
+    await this.prisma.$transaction([
+      // Revenu net du professionnel (en attente de versement)
+      this.prisma.transaction.create({
+        data: {
+          professionalId: order.professionalId,
+          type:           'PAYOUT' as any,
+          amount:         profAmount,
+          currency:       order.currency,
+          status:         'PENDING' as any,
+          description:    `Revenue for order ${orderId}`,
+        },
+      }),
+      // Commission plateforme (enregistrée et acquise)
+      this.prisma.transaction.create({
+        data: {
+          type:        'COMMISSION' as any,
+          amount:      Number(order.commissionAmount),
+          currency:    order.currency,
+          status:      'COMPLETED' as any,
+          description: `Commission for order ${orderId}`,
+        },
+      }),
+    ]);
   }
 
   private async grantReferralReward(clientId: string): Promise<void> {
