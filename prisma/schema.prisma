@@ -429,15 +429,14 @@ model Document {
 
 model ProductCategory {
   id             String    @id @default(uuid())
-  professionalId String
+  // NULL = catégorie globale (plateforme) ; valeur = catégorie spécifique à un pro (legacy)
+  professionalId String?
   name           Json
   icon           String?
   sortOrder      Int       @default(0)
   createdAt      DateTime  @default(now())
   products       Product[]
-  // Relation explicite vers Professional pour permettre include({professional:true})
-  // dans le service updateCategory/deleteCategory (ownership check).
-  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: Cascade)
 
   @@index([professionalId])
   @@map("product_categories")

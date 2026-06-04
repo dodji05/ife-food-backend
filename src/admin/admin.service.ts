@@ -566,9 +566,15 @@ export class AdminService {
     const [professional, categories] = await Promise.all([
       this.prisma.professional.findUnique({ where: { id: proId }, select: { id: true, businessName: true, category: true, city: true } }),
       this.prisma.productCategory.findMany({
-        where: { professionalId: proId },
+        // Catégories globales (professionalId NULL) + catégories legacy du pro
+        where: { OR: [{ professionalId: null }, { professionalId: proId }] },
         orderBy: { sortOrder: 'asc' },
-        include: { products: { orderBy: { createdAt: 'asc' } } },
+        include: {
+          products: {
+            where: { professionalId: proId },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
       }),
     ]);
     if (!professional) throw new NotFoundException('Professionnel introuvable');
@@ -577,6 +583,23 @@ export class AdminService {
 
   async createCatalogueCategory(proId: string, dto: { name: any; icon?: string }) {
     return this.prisma.productCategory.create({ data: { professionalId: proId, name: dto.name, icon: dto.icon } });
+  }
+
+  // ── Catégories globales (indépendantes d'un professionnel) ──────────────────
+
+  async getGlobalCategories() {
+    const categories = await this.prisma.productCategory.findMany({
+      where: { professionalId: null },
+      orderBy: { sortOrder: 'asc' },
+    });
+    return { data: categories };
+  }
+
+  async createGlobalCategory(dto: { name: any; icon?: string }) {
+    const category = await this.prisma.productCategory.create({
+      data: { professionalId: null, name: dto.name, icon: dto.icon ?? null },
+    });
+    return { data: category };
   }
 
   async deleteCatalogueCategory(categoryId: string) {

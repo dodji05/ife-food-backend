@@ -305,6 +305,16 @@ export class AdminController {
   }
 
   // CATALOGUE ADMIN
+  @Get('catalogue/categories')
+  getGlobalCategories() {
+    return this.adminService.getGlobalCategories();
+  }
+
+  @Post('catalogue/categories')
+  createGlobalCategory(@Body() dto: any) {
+    return this.adminService.createGlobalCategory(dto);
+  }
+
   @Get('catalogue/:proId')
   getCatalogueForPro(@Param('proId') proId: string) {
     return this.adminService.getCatalogueForPro(proId);
