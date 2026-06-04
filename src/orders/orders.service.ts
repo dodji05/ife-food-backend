@@ -306,13 +306,36 @@ export class OrdersService {
     const cfg = commissionConfig?.value as any;
     const proCfg = cfg?.professional ?? cfg;
 
+    const baseSubtotal   = baseItems.reduce((sum, i) => sum + i.totalPrice, 0);
+    const totalItemCount = baseItems.reduce((sum, i) => sum + i.quantity, 0);
+
     let commissionAmount = 0;
     let orderItems = baseItems;
 
-    if (proCfg?.type === 'PERCENTAGE') {
-      const baseSubtotal = baseItems.reduce((sum, i) => sum + i.totalPrice, 0);
+    // ── Paliers RPO (prioritaire sur type/value) ──────────────────────────────
+    // Sélectionne le palier selon le nombre total de plats commandés :
+    //   palier 0 : ≤ 2 plats | palier 1 : 3–6 | palier 2 : 7–10 | palier 3 : > 10
+    const selectTier = (tiers: any[], count: number) => {
+      if (!Array.isArray(tiers) || tiers.length < 4) return null;
+      if (count <= 2)  return tiers[0];
+      if (count <= 6)  return tiers[1];
+      if (count <= 10) return tiers[2];
+      return tiers[3];
+    };
+
+    const proTier   = proCfg?.tiers ? selectTier(proCfg.tiers, totalItemCount) : null;
+    const tierRate  = proTier ? Number(proTier.rate ?? 0) : 0;
+    const tierFixed = proTier ? Number(proTier.fixedAmount ?? 0) : 0;
+
+    if (tierRate > 0 || tierFixed > 0) {
+      // Taux (%) sur le sous-total
+      if (tierRate > 0) commissionAmount += baseSubtotal * (tierRate / 100);
+      // Montant fixe × nombre de plats
+      if (tierFixed > 0) commissionAmount += tierFixed * totalItemCount;
+
+    // ── Fallback : mode global type/value (legacy + rétrocompatibilité) ───────
+    } else if (proCfg?.type === 'PERCENTAGE') {
       commissionAmount = baseSubtotal * (Number(proCfg.value) / 100);
-      // unitPrice = base price; subtotal = base price sum
     } else if (proCfg?.type === 'FIXED_PER_DISH' || proCfg?.type === 'FIXED_AMOUNT') {
       const fixedPerDish = Number(proCfg.value ?? 0);
       commissionAmount = baseItems.reduce((sum, i) => sum + fixedPerDish * i.quantity, 0);

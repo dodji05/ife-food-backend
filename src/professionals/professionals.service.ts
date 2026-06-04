@@ -466,7 +466,10 @@ export class ProfessionalsService {
     // Commission rate depuis PlatformConfig
     const commCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
     const commRaw = commCfg?.value && typeof commCfg.value === 'object' ? (commCfg.value as any) : {};
-    const proPct  = commRaw.professional?.value ?? commRaw.value ?? 15;
+    // Si les paliers RPO sont configurés, pas de taux unique à afficher (bannière masquée côté mobile)
+    const hasTiers = Array.isArray(commRaw.professional?.tiers) &&
+      commRaw.professional.tiers.some((t: any) => Number(t?.rate ?? 0) > 0 || Number(t?.fixedAmount ?? 0) > 0);
+    const proPct  = hasTiers ? 0 : (commRaw.professional?.value ?? commRaw.value ?? 15);
 
     const now   = new Date();
     const today = new Date(now); today.setHours(0,0,0,0);
