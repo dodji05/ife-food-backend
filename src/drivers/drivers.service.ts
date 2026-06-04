@@ -421,19 +421,57 @@ export class DriversService {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) return;
 
-    // DELIVERY_FEE du livreur — créditée à la livraison effective
-    await this.prisma.transaction.create({
-      data: {
-        driverId,
-        type:        'DELIVERY_FEE' as any,
-        amount:      order.deliveryFee,
-        currency:    order.currency,
-        status:      'COMPLETED' as any,
-        description: `Delivery for order ${orderId}`,
-      },
-    });
+    // ── Commission livreur ──────────────────────────────────────────────────
+    const commCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
+    const commRaw = commCfg?.value && typeof commCfg.value === 'object' ? (commCfg.value as any) : {};
+    const driverCfg = commRaw.driver ?? { type: 'PERCENTAGE', value: 0 };
 
-    // PAYOUT pro + COMMISSION plateforme sont créés dès le paiement
+    const deliveryFee = Number(order.deliveryFee);
+    let driverCommission = 0;
+
+    if (driverCfg.type === 'PERCENTAGE') {
+      driverCommission = deliveryFee * (Number(driverCfg.value ?? 0) / 100);
+    } else if (driverCfg.type === 'FIXED_PER_DISH' || driverCfg.type === 'FIXED_AMOUNT') {
+      // Montant fixe par livraison (indépendant du nombre de plats)
+      driverCommission = Number(driverCfg.value ?? 0);
+    }
+
+    // La commission ne peut pas dépasser les frais de livraison
+    driverCommission = Math.min(driverCommission, deliveryFee);
+    const driverNet  = deliveryFee - driverCommission;
+
+    const txns: any[] = [
+      // Revenu net du livreur après déduction de la commission plateforme
+      this.prisma.transaction.create({
+        data: {
+          driverId,
+          type:        'DELIVERY_FEE' as any,
+          amount:      driverNet,
+          currency:    order.currency,
+          status:      'COMPLETED' as any,
+          description: `Delivery for order ${orderId}`,
+        },
+      }),
+    ];
+
+    // Commission plateforme sur la livraison (si > 0)
+    if (driverCommission > 0) {
+      txns.push(
+        this.prisma.transaction.create({
+          data: {
+            type:        'COMMISSION' as any,
+            amount:      driverCommission,
+            currency:    order.currency,
+            status:      'COMPLETED' as any,
+            description: `Driver commission for order ${orderId}`,
+          },
+        }),
+      );
+    }
+
+    await this.prisma.$transaction(txns);
+
+    // PAYOUT pro + COMMISSION pro sont créés dès le paiement
     // (PaymentsService.applyProCommissionOnPayment). Ne pas dupliquer ici.
   }
 
