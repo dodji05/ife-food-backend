@@ -9,6 +9,7 @@ import { AdminLevelGuard } from '../common/guards/admin-level.guard';
 import { AdminLevel } from '../common/decorators/admin-level.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
+import { TasksService } from '../tasks/tasks.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('admin')
@@ -17,7 +18,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 @Roles('ADMIN')
 @Controller('admin')
 export class AdminController {
-  constructor(private adminService: AdminService) {}
+  constructor(private adminService: AdminService, private tasksService: TasksService) {}
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Get admin dashboard KPIs' })
@@ -265,6 +266,13 @@ export class AdminController {
   @UseGuards(AdminLevelGuard)
   @AdminLevel('SUPER_ADMIN')
   setExchangeRateCredentials(@Body() body: any) { return this.adminService.setExchangeRateCredentials(body); }
+
+  @Post('config/exchange-rate-credentials/refresh')
+  @ApiOperation({ summary: 'Trigger manual exchange rate refresh and return stored rates' })
+  async refreshExchangeRates() {
+    await this.tasksService.refreshExchangeRates();
+    return this.adminService.getCurrencies();
+  }
 
   @Get('config/delivery-mode')
   getDeliveryModeConfig() { return this.adminService.getDeliveryModeConfig(); }
