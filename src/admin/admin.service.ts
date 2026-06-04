@@ -566,8 +566,7 @@ export class AdminService {
     const [professional, categories] = await Promise.all([
       this.prisma.professional.findUnique({ where: { id: proId }, select: { id: true, businessName: true, category: true, city: true } }),
       this.prisma.productCategory.findMany({
-        // Catégories globales (professionalId NULL) + catégories legacy du pro
-        where: { OR: [{ professionalId: null }, { professionalId: proId }] },
+        // Toutes les catégories (globales + legacy pro) — cohérent avec getGlobalCategories
         orderBy: { sortOrder: 'asc' },
         include: {
           products: {
@@ -588,8 +587,10 @@ export class AdminService {
   // ── Catégories globales (indépendantes d'un professionnel) ──────────────────
 
   async getGlobalCategories() {
+    // Retourne TOUTES les catégories (globales + legacy liées à un pro).
+    // Les catégories existantes ont un professionalId — les exclure viderait la liste.
+    // Les nouvelles créées via ce panneau auront professionalId = null.
     const categories = await this.prisma.productCategory.findMany({
-      where: { professionalId: null },
       orderBy: { sortOrder: 'asc' },
     });
     return { data: categories };
