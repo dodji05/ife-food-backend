@@ -1097,7 +1097,7 @@ export class AdminService {
     if (country) baseWhere.deliveryCountry = country;
     const recentWhere: any = { ...baseWhere, createdAt: { gte: sixMonthsAgo } };
 
-    // Read driver commission rate from config to compute driver slice of delivery fees
+    // Config conservée pour le détail du graphique mensuel (estimation par ordre)
     const cfgRow = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
     const cfgRaw = cfgRow?.value && typeof cfgRow.value === 'object' ? (cfgRow.value as any) : {};
     const driverCfg  = cfgRaw.driver  ?? { type: 'PERCENTAGE', value: 10 };
@@ -1105,7 +1105,7 @@ export class AdminService {
     const countryCfg = country && cfgRaw.countries?.[country];
     const effectiveDriver = countryCfg?.driver ?? driverCfg;
 
-    const [totals, recent, topRaw, totalOrderCount] = await Promise.all([
+    const [totals, recent, topRaw, totalOrderCount, actualDriverCommAgg] = await Promise.all([
       this.prisma.order.aggregate({
         where: baseWhere,
         _sum: { commissionAmount: true, totalAmount: true, deliveryFee: true },
@@ -1123,14 +1123,25 @@ export class AdminService {
         take: 5,
       }),
       this.prisma.order.count({ where: baseWhere }),
+      // Commissions réelles prélevées sur les livreurs (transactions créées à la livraison)
+      // driverId: { not: null } distingue les commissions livreur des commissions pro
+      this.prisma.transaction.aggregate({
+        where: { type: 'COMMISSION' as any, status: 'COMPLETED', driverId: { not: null } },
+        _sum: { amount: true },
+      }),
     ]);
 
-    // Compute driver commission from delivery fees
-    const totalDeliveryFees  = totals._sum.deliveryFee ?? 0;
-    const driverRate         = effectiveDriver.type === 'PERCENTAGE' ? (effectiveDriver.value ?? 10) / 100 : 0;
-    const totalDriverComm    = effectiveDriver.type === 'PERCENTAGE'
+    const totalDeliveryFees = totals._sum.deliveryFee ?? 0;
+    // Total livreur : transactions réelles en priorité, estimation config en fallback
+    // (les transactions réelles n'existent que depuis le déploiement qui lie driverId)
+    const actualDriverComm = actualDriverCommAgg._sum.amount ?? 0;
+    const driverRate       = effectiveDriver.type === 'PERCENTAGE' ? (effectiveDriver.value ?? 10) / 100 : 0;
+    const estimatedDriverComm = effectiveDriver.type === 'PERCENTAGE'
       ? Math.round(totalDeliveryFees * driverRate)
       : Math.round(totalOrderCount * (effectiveDriver.value ?? 0));
+    // On prend la valeur la plus grande entre réel et estimé pour ne pas sous-estimer
+    // (les commandes antérieures au fix n'ont pas de transaction livreur liée)
+    const totalDriverComm = Math.max(actualDriverComm, estimatedDriverComm);
 
     const totalProComm       = totals._sum.commissionAmount ?? 0;
     const totalPlatformComm  = totalProComm + totalDriverComm;

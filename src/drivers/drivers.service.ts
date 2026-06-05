@@ -253,6 +253,7 @@ export class DriversService {
       todayDeliveries, weekDeliveries, monthDeliveries, allDeliveries, avgRating,
       todayEarningsAgg, weekEarningsAgg, monthEarningsAgg, totalEarningsAgg,
       totalTipsAgg, totalPayoutsAgg, pendingWithdrawalsAgg,
+      totalDriverCommAgg,
     ] = await Promise.all([
       this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED', createdAt: { gte: today } } }),
       this.prisma.delivery.count({ where: { driverId: driver.id, status: 'DELIVERED', createdAt: { gte: weekStart } } }),
@@ -290,26 +291,35 @@ export class DriversService {
         where: { driverId: driver.id, type: 'WITHDRAWAL' as any, status: 'PENDING' },
         _sum: { amount: true },
       }),
+      // Commission plateforme prélevée sur les livraisons (COMMISSION avec driverId)
+      this.prisma.transaction.aggregate({
+        where: { driverId: driver.id, type: 'COMMISSION' as any, status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
     ]);
 
-    const totalCommissions = totalEarningsAgg._sum.amount ?? 0;
-    const totalTips        = totalTipsAgg._sum.amount     ?? 0;
-    const totalPaidOut     = totalPayoutsAgg._sum.amount  ?? 0;
-    const pendingPayouts   = pendingWithdrawalsAgg._sum.amount ?? 0;
-    const availableBalance = totalCommissions + totalTips - totalPaidOut - pendingPayouts;
+    const totalNetEarnings               = totalEarningsAgg._sum.amount   ?? 0;
+    const totalDriverCommissionDeducted  = totalDriverCommAgg._sum.amount ?? 0;
+    const grossDeliveryFees              = totalNetEarnings + totalDriverCommissionDeducted;
+    const totalTips                      = totalTipsAgg._sum.amount     ?? 0;
+    const totalPaidOut                   = totalPayoutsAgg._sum.amount  ?? 0;
+    const pendingPayouts                 = pendingWithdrawalsAgg._sum.amount ?? 0;
+    const availableBalance               = totalNetEarnings + totalTips - totalPaidOut - pendingPayouts;
 
     return { data: {
       todayDeliveries,
       weekDeliveries,
       monthDeliveries,
       allDeliveries,
-      avgRating:        avgRating._avg.driverRating,
-      todayEarnings:    todayEarningsAgg._sum.amount  ?? 0,
-      weekEarnings:     weekEarningsAgg._sum.amount   ?? 0,
-      monthEarnings:    monthEarningsAgg._sum.amount  ?? 0,
-      totalEarnings:    totalCommissions,
+      avgRating:                    avgRating._avg.driverRating,
+      todayEarnings:                todayEarningsAgg._sum.amount  ?? 0,
+      weekEarnings:                 weekEarningsAgg._sum.amount   ?? 0,
+      monthEarnings:                monthEarningsAgg._sum.amount  ?? 0,
+      totalEarnings:                totalNetEarnings,
+      grossDeliveryFees,
+      totalDriverCommissionDeducted,
       totalTips,
-      availableBalance: Math.max(0, availableBalance),
+      availableBalance:             Math.max(0, availableBalance),
       pendingPayouts,
     } };
   }
@@ -455,10 +465,12 @@ export class DriversService {
     ];
 
     // Commission plateforme sur la livraison (si > 0)
+    // On lie la transaction au driverId pour pouvoir l'agréger côté dashboard.
     if (driverCommission > 0) {
       txns.push(
         this.prisma.transaction.create({
           data: {
+            driverId,
             type:        'COMMISSION' as any,
             amount:      driverCommission,
             currency:    order.currency,
