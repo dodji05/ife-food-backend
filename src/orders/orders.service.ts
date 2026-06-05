@@ -330,8 +330,8 @@ export class OrdersService {
     if (tierRate > 0 || tierFixed > 0) {
       // Taux (%) sur le sous-total
       if (tierRate > 0) commissionAmount += baseSubtotal * (tierRate / 100);
-      // Montant fixe forfaitaire par commande (pas × nb de plats)
-      if (tierFixed > 0) commissionAmount += tierFixed;
+      // Montant fixe × nombre de plats commandés (tierFixed = tarif par plat)
+      if (tierFixed > 0) commissionAmount += tierFixed * totalItemCount;
 
     // ── Fallback : mode global type/value (legacy + rétrocompatibilité) ───────
     } else if (proCfg?.type === 'PERCENTAGE') {
