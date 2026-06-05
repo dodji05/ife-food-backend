@@ -10,19 +10,38 @@ export class TasksService {
 
   constructor(private prisma: PrismaService, private config: ConfigService) {}
 
-  /** Refresh exchange rates every 6 hours */
+  /** Refresh exchange rates every 6 hours (cron) */
   @Cron('0 */6 * * *')
   async refreshExchangeRates() {
-    this.logger.log('🔄 Refreshing exchange rates...');
-    try {
-      // Clé + URL : priorité config admin (DB), fallback .env.
-      const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'exchangeRateCredentials' } });
-      const raw = (cfg?.value as any) ?? {};
-      const apiKey = raw.apiKey || this.config.get('EXCHANGE_RATE_API_KEY');
-      const apiUrl = raw.apiUrl || this.config.get('EXCHANGE_RATE_API_URL', 'https://v6.exchangerate-api.com/v6');
-      // Ignorer si la clé est absente ou contient encore la valeur placeholder
-      if (!apiKey || apiKey.includes('your_') || apiKey.length < 10) return;
+    // Mode cron : on avale les erreurs pour ne pas crasher le scheduler
+    await this._doRefreshExchangeRates(false);
+  }
 
+  /**
+   * Exécute le refresh des taux de change.
+   * @param throwOnError  true = propage l'erreur (appel manuel depuis le controller)
+   *                      false = catch silencieux (cron)
+   */
+  async triggerManualRefresh() {
+    await this._doRefreshExchangeRates(true);
+  }
+
+  private async _doRefreshExchangeRates(throwOnError: boolean) {
+    this.logger.log('🔄 Refreshing exchange rates...');
+
+    // Clé + URL : priorité config admin (DB), fallback .env.
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'exchangeRateCredentials' } });
+    const raw = (cfg?.value as any) ?? {};
+    const apiKey = raw.apiKey || this.config.get('EXCHANGE_RATE_API_KEY');
+    const apiUrl = raw.apiUrl || this.config.get('EXCHANGE_RATE_API_URL', 'https://v6.exchangerate-api.com/v6');
+
+    // Clé absente ou placeholder → erreur explicite en mode manuel, silencieux en cron
+    if (!apiKey || apiKey.includes('your_') || apiKey.length < 10) {
+      if (throwOnError) throw new Error('Clé API manquante ou invalide (longueur < 10)');
+      return;
+    }
+
+    try {
       // Devises cibles explicites : paires utiles pour la diaspora + Afrique de l'Ouest.
       // On ne fait PAS de slice(0, 20) — conversion_rates est trié alphabétiquement
       // et les devises importantes (EUR, USD, GBP…) seraient hors des 20 premières.
@@ -31,6 +50,10 @@ export class TasksService {
 
       for (const base of baseCurrencies) {
         const { data } = await axios.get(`${apiUrl}/${apiKey}/latest/${base}`);
+        // exchangerate-api.com renvoie { result: 'error', ... } avec HTTP 200 pour une mauvaise clé
+        if (data.result === 'error') {
+          throw new Error(`API error: ${data['error-type'] ?? data.result}`);
+        }
         const rates = data.conversion_rates as Record<string, number>;
         for (const to of TARGET_CURRENCIES) {
           if (to === base || !(to in rates)) continue;
@@ -45,6 +68,7 @@ export class TasksService {
       this.logger.log('✅ Exchange rates refreshed');
     } catch (err: unknown) {
       this.logger.error('Exchange rate refresh failed', err instanceof Error ? err.message : String(err));
+      if (throwOnError) throw err;
     }
   }
 

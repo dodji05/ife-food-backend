@@ -270,7 +270,8 @@ export class AdminController {
   @Post('config/exchange-rate-credentials/refresh')
   @ApiOperation({ summary: 'Trigger manual exchange rate refresh and return stored rates' })
   async refreshExchangeRates() {
-    await this.tasksService.refreshExchangeRates();
+    // triggerManualRefresh propage les erreurs (clé invalide, API error) → HTTP 500 → toast rouge côté admin
+    await this.tasksService.triggerManualRefresh();
     return this.adminService.getCurrencies();
   }
 
