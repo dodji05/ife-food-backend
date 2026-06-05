@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Put, Delete, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Put, Delete, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -270,8 +270,13 @@ export class AdminController {
   @Post('config/exchange-rate-credentials/refresh')
   @ApiOperation({ summary: 'Trigger manual exchange rate refresh and return stored rates' })
   async refreshExchangeRates() {
-    // triggerManualRefresh propage les erreurs (clé invalide, API error) → HTTP 500 → toast rouge côté admin
-    await this.tasksService.triggerManualRefresh();
+    try {
+      await this.tasksService.triggerManualRefresh();
+    } catch (err: any) {
+      // Convertir en BadRequestException (400) pour que NestJS expose le message réel
+      // au lieu du générique "Internal server error" (500).
+      throw new BadRequestException(err?.message ?? 'Échec du rafraîchissement des taux de change');
+    }
     return this.adminService.getCurrencies();
   }
 

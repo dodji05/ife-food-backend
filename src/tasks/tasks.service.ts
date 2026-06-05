@@ -67,8 +67,17 @@ export class TasksService {
       }
       this.logger.log('✅ Exchange rates refreshed');
     } catch (err: unknown) {
-      this.logger.error('Exchange rate refresh failed', err instanceof Error ? err.message : String(err));
-      if (throwOnError) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Exchange rate refresh failed: ${msg}`);
+      if (throwOnError) {
+        // Enrichir le message pour l'affichage frontend
+        const friendly = msg.includes('ENOTFOUND') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT')
+          ? `Impossible de joindre l'API de taux de change (erreur réseau : ${msg})`
+          : msg.startsWith('API error:')
+            ? `Erreur API exchangerate : ${msg.replace('API error: ', '')}`
+            : msg;
+        throw new Error(friendly);
+      }
     }
   }
 
