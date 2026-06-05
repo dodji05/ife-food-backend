@@ -32,14 +32,21 @@ export class TasksService {
     // Clé + URL : priorité config admin (DB), fallback .env.
     const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'exchangeRateCredentials' } });
     const raw = (cfg?.value as any) ?? {};
-    const apiKey = raw.apiKey || this.config.get('EXCHANGE_RATE_API_KEY');
-    const apiUrl = raw.apiUrl || this.config.get('EXCHANGE_RATE_API_URL', 'https://v6.exchangerate-api.com/v6');
+    const apiKey = (raw.apiKey || this.config.get('EXCHANGE_RATE_API_KEY') || '').trim();
+    // Normalisation : supprime les slashes finaux pour éviter les doubles slashes dans l'URL
+    const apiUrl = (raw.apiUrl || this.config.get('EXCHANGE_RATE_API_URL', 'https://v6.exchangerate-api.com/v6') || '')
+      .trim()
+      .replace(/\/+$/, '');
 
     // Clé absente ou placeholder → erreur explicite en mode manuel, silencieux en cron
     if (!apiKey || apiKey.includes('your_') || apiKey.length < 10) {
       if (throwOnError) throw new Error('Clé API manquante ou invalide (longueur < 10)');
       return;
     }
+
+    // Log de l'URL réelle (clé masquée) pour faciliter le diagnostic
+    const maskedKey = apiKey.length > 8 ? `${apiKey.slice(0, 4)}****${apiKey.slice(-4)}` : '****';
+    this.logger.log(`📡 Calling: ${apiUrl}/${maskedKey}/latest/XOF (+ 3 autres bases)`);
 
     try {
       // Devises cibles explicites : paires utiles pour la diaspora + Afrique de l'Ouest.
