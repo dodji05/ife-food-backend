@@ -147,7 +147,16 @@ export class ProfessionalsService {
     const prof = await this.prisma.professional.findUnique({
       where: { id, status: 'VALIDATED' },
       include: {
-        products: { where: { isAvailable: true }, include: { category: true } },
+        // Tous les produits (disponibles ET rupture/indisponibles) pour que
+        // le mobile puisse les afficher avec les badges appropriés.
+        // Le filtre isAvailable:true était trop restrictif : un produit
+        // temporairement en rupture de stock disparaissait du menu.
+        products: {
+          include: { category: true },
+          orderBy: [{ categoryId: 'asc' }, { createdAt: 'asc' }],
+        },
+        // Catégories du pro pour le groupement dans le menu
+        productCategories: { orderBy: { order: 'asc' } },
         reviews: {
           include: { reviewer: { select: { name: true, avatarUrl: true } } },
           take: 10,
