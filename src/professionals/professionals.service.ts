@@ -471,10 +471,56 @@ export class ProfessionalsService {
     };
   }
 
+  // ── Demande de virement ────────────────────────────────────────────────────
+  async requestWithdrawal(userId: string, amount: number, paymentInfo?: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    if (amount <= 0) throw new BadRequestException('Le montant doit être supérieur à 0');
+
+    // Recalcule le solde disponible en temps réel (all-time net − virements)
+    const [earningsAgg, paidOutAgg, pendingAgg] = await Promise.all([
+      this.prisma.order.aggregate({
+        where: { professionalId: prof.id, status: 'DELIVERED' },
+        _sum: { subtotal: true, commissionAmount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { professionalId: prof.id, type: 'WITHDRAWAL' as any, status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { professionalId: prof.id, type: 'WITHDRAWAL' as any, status: 'PENDING' },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const totalNet  = Number(earningsAgg._sum.subtotal ?? 0) - Number(earningsAgg._sum.commissionAmount ?? 0);
+    const available = Math.max(0, totalNet - (paidOutAgg._sum.amount ?? 0) - (pendingAgg._sum.amount ?? 0));
+
+    if (amount > available) {
+      throw new BadRequestException(
+        `Montant supérieur au solde disponible (${available.toFixed(0)} F)`
+      );
+    }
+
+    const withdrawal = await this.prisma.transaction.create({
+      data: {
+        professionalId: prof.id,
+        type:        'WITHDRAWAL' as any,
+        amount,
+        currency:    'XOF',
+        status:      'PENDING',
+        description: paymentInfo
+          ? `Demande de virement — ${new Date().toLocaleDateString('fr-FR')} — Paiement : ${paymentInfo}`
+          : `Demande de virement — ${new Date().toLocaleDateString('fr-FR')}`,
+      },
+    });
+    return { data: withdrawal };
+  }
+
   // ── Revenus détaillés ──────────────────────────────────────────────────────
   async getEarnings(userId: string, days: number) {
     const prof = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!prof) return { data: { commissionRate: 15, summary: { today: {gross:0,net:0}, week: {gross:0,net:0}, month: {gross:0,net:0} }, totals: { gross:0, commission:0, net:0, orders:0 }, revenueByDay: [], recentOrders: [] } };
+    if (!prof) return { data: { commissionRate: 15, availableBalance: 0, pendingPayouts: 0, summary: { today: {gross:0,net:0}, week: {gross:0,net:0}, month: {gross:0,net:0} }, totals: { gross:0, commission:0, net:0, orders:0 }, revenueByDay: [], recentOrders: [] } };
 
     // Commission rate depuis PlatformConfig
     const commCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'commission' } });
@@ -496,6 +542,26 @@ export class ProfessionalsService {
       const d = new Date(today); d.setDate(d.getDate() - i);
       dayList.push(d);
     }
+
+    // ── Solde disponible (all-time) ────────────────────────────────────────
+    const [allTimeAgg, withdrawalCompletedAgg, withdrawalPendingAgg] = await Promise.all([
+      this.prisma.order.aggregate({
+        where: { professionalId: prof.id, status: 'DELIVERED' },
+        _sum: { subtotal: true, commissionAmount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { professionalId: prof.id, type: 'WITHDRAWAL' as any, status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.aggregate({
+        where: { professionalId: prof.id, type: 'WITHDRAWAL' as any, status: 'PENDING' },
+        _sum: { amount: true },
+      }),
+    ]);
+    const allTimeNet      = Number(allTimeAgg._sum.subtotal ?? 0) - Number(allTimeAgg._sum.commissionAmount ?? 0);
+    const totalWithdrawn  = withdrawalCompletedAgg._sum.amount ?? 0;
+    const pendingPayouts  = withdrawalPendingAgg._sum.amount   ?? 0;
+    const availableBalance = Math.max(0, allTimeNet - totalWithdrawn - pendingPayouts);
 
     // Un aggregate par jour (subtotal + commissionAmount)
     const dayAggs = await Promise.all(
@@ -556,6 +622,8 @@ export class ProfessionalsService {
     return {
       data: {
         commissionRate: proPct,
+        availableBalance,
+        pendingPayouts,
         summary: {
           today: _ns(todayAgg),
           week:  _ns(weekAgg),

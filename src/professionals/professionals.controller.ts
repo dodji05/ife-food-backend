@@ -48,6 +48,17 @@ export class ProfessionalsController {
     return this.professionalsService.getEarnings(user.id, days);
   }
 
+  @Post('me/withdrawal')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Request a payout withdrawal' })
+  requestWithdrawal(
+    @CurrentUser() user: any,
+    @Body('amount') amount: number,
+    @Body('paymentInfo') paymentInfo?: string,
+  ) {
+    return this.professionalsService.requestWithdrawal(user.id, amount, paymentInfo);
+  }
+
   @Patch('me')
   @ApiBearerAuth('JWT')
   updateProfile(@CurrentUser() user: any, @Body() dto: UpdateProfessionalDto) {
