@@ -156,22 +156,26 @@ export class ProfessionalsService {
           orderBy: [{ categoryId: 'asc' }, { createdAt: 'asc' }],
         },
         // Catégories du pro pour le groupement dans le menu
-        productCategories: { orderBy: { order: 'asc' } },
+        // (champ Prisma = sortOrder, pas order)
+        productCategories: { orderBy: { sortOrder: 'asc' } },
         reviews: {
           include: { reviewer: { select: { name: true, avatarUrl: true } } },
           take: 10,
           orderBy: { createdAt: 'desc' },
         },
-        _count: { select: { reviews: true } },
       },
     });
     if (!prof) throw new NotFoundException('Establishment not found');
 
-    // Note moyenne sur l'ensemble des reviews (pas seulement les 10 dernières).
-    const ratingAgg = await this.prisma.review.aggregate({
-      where: { professionalId: id },
-      _avg: { professionalRating: true },
-    });
+    // Note moyenne + nombre total de reviews (requêtes séparées car _count
+    // dans findUnique n'est pas typé correctement par Prisma TS generator).
+    const [ratingAgg, reviewCount] = await Promise.all([
+      this.prisma.review.aggregate({
+        where: { professionalId: id },
+        _avg: { professionalRating: true },
+      }),
+      this.prisma.review.count({ where: { professionalId: id } }),
+    ]);
     const avgRating = ratingAgg._avg.professionalRating ?? 0;
 
     // Délai de livraison moyen depuis la config plateforme, sinon valeur par défaut.
@@ -183,7 +187,7 @@ export class ProfessionalsService {
         ...prof,
         // Champs aplatis pour le mobile
         avgRating: Math.round(avgRating * 10) / 10,
-        reviewCount: prof._count.reviews,
+        reviewCount,
         deliveryTimeMin: deliveryDefaults.defaultTimeMin ?? 25,
         // deliveryFee volontairement absent : la valeur réelle est calculée dynamiquement
         // par geo.service.calculateDeliveryFee() selon le mode actif (zone/km/city).
