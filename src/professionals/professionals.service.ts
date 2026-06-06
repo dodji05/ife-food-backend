@@ -187,6 +187,10 @@ export class ProfessionalsService {
         deliveryTimeMin: deliveryDefaults.defaultTimeMin ?? 25,
         // deliveryFee volontairement absent : la valeur réelle est calculée dynamiquement
         // par geo.service.calculateDeliveryFee() selon le mode actif (zone/km/city).
+        // BUG FIX : recalculer isOpen avec les horaires configurés, exactement
+        // comme getMyProfile le fait. Sans ça, le client voyait le isOpen brut
+        // de la DB (souvent false) même si les openingHours indiquaient ouvert.
+        isOpen: this._computeIsOpen(prof.isOpen, prof.openingHours),
       },
     };
   }
