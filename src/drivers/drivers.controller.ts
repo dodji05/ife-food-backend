@@ -54,8 +54,12 @@ export class DriversController {
 
   @Post('me/withdrawal')
   @ApiOperation({ summary: 'Request a payout withdrawal' })
-  requestWithdrawal(@CurrentUser() user: any, @Body('amount') amount: number) {
-    return this.driversService.requestWithdrawal(user.id, amount);
+  requestWithdrawal(
+    @CurrentUser() user: any,
+    @Body('amount') amount: number,
+    @Body('paymentInfo') paymentInfo?: string,
+  ) {
+    return this.driversService.requestWithdrawal(user.id, amount, paymentInfo);
   }
 
   @Get('config')

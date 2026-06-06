@@ -324,7 +324,7 @@ export class DriversService {
     } };
   }
 
-  async requestWithdrawal(userId: string, amount: number) {
+  async requestWithdrawal(userId: string, amount: number, paymentInfo?: string) {
     const driver = await this.prisma.driver.findUnique({ where: { userId } });
     if (!driver) throw new NotFoundException();
     if (amount <= 0) throw new BadRequestException('Le montant doit être supérieur à 0');
@@ -366,7 +366,9 @@ export class DriversService {
         amount,
         currency:    'XOF',
         status:      'PENDING',
-        description: `Demande de virement — ${new Date().toLocaleDateString('fr-FR')}`,
+        description: paymentInfo
+          ? `Demande de virement — ${new Date().toLocaleDateString('fr-FR')} — Paiement : ${paymentInfo}`
+          : `Demande de virement — ${new Date().toLocaleDateString('fr-FR')}`,
       },
     });
     return { data: withdrawal };
