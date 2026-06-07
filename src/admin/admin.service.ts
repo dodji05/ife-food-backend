@@ -590,8 +590,11 @@ export class AdminService {
     // Retourne TOUTES les catégories (globales + legacy liées à un pro).
     // Les catégories existantes ont un professionalId — les exclure viderait la liste.
     // Les nouvelles créées via ce panneau auront professionalId = null.
+    // _count.products : exposé pour que l'admin puisse voir si une catégorie
+    // est encore utilisée avant de tenter une suppression.
     const categories = await this.prisma.productCategory.findMany({
       orderBy: { sortOrder: 'asc' },
+      include: { _count: { select: { products: true } } },
     });
     return { data: categories };
   }
@@ -604,10 +607,15 @@ export class AdminService {
   }
 
   async deleteCatalogueCategory(categoryId: string) {
-    await this.prisma.$transaction([
-      this.prisma.product.updateMany({ where: { categoryId }, data: { categoryId: null } }),
-      this.prisma.productCategory.delete({ where: { id: categoryId } }),
-    ]);
+    // Interdit la suppression si la catégorie contient encore des produits.
+    // L'admin doit d'abord déplacer ou supprimer les produits concernés.
+    const productCount = await this.prisma.product.count({ where: { categoryId } });
+    if (productCount > 0) {
+      throw new BadRequestException(
+        `Impossible de supprimer : cette catégorie contient ${productCount} produit${productCount > 1 ? 's' : ''}. Veuillez d'abord déplacer ou supprimer ces produits.`
+      );
+    }
+    await this.prisma.productCategory.delete({ where: { id: categoryId } });
     return { success: true };
   }
 
