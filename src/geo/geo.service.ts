@@ -9,6 +9,48 @@ export class GeoService {
 
   constructor(private config: ConfigService, private prisma: PrismaService) {}
 
+  /**
+   * Calcule la distance routière réelle via Google Distance Matrix API.
+   * Fallback automatique sur Haversine si la clé est absente ou l'API indisponible.
+   * @returns distance en km (route réelle ou vol d'oiseau en fallback)
+   */
+  async getRoutingDistance(
+    originLat: number, originLng: number,
+    destLat: number,   destLng: number,
+  ): Promise<number> {
+    const apiKey = this.config.get<string>('GOOGLE_MAPS_API_KEY');
+    if (!apiKey) {
+      this.logger.warn('GOOGLE_MAPS_API_KEY absent — fallback Haversine pour la distance');
+      return this.calculateDistance(originLat, originLng, destLat, destLng);
+    }
+
+    try {
+      const url = 'https://maps.googleapis.com/maps/api/distancematrix/json';
+      const { data } = await axios.get(url, {
+        params: {
+          origins:      `${originLat},${originLng}`,
+          destinations: `${destLat},${destLng}`,
+          mode:         'driving',
+          key:          apiKey,
+        },
+        timeout: 5000,
+      });
+
+      const element = data?.rows?.[0]?.elements?.[0];
+      if (element?.status === 'OK' && element.distance?.value) {
+        const km = element.distance.value / 1000; // mètres → km
+        this.logger.log(`Distance Matrix API: ${km.toFixed(2)} km (route réelle)`);
+        return km;
+      }
+
+      this.logger.warn(`Distance Matrix API: statut inattendu "${element?.status}" — fallback Haversine`);
+    } catch (err: any) {
+      this.logger.warn(`Distance Matrix API error: ${err.message} — fallback Haversine`);
+    }
+
+    return this.calculateDistance(originLat, originLng, destLat, destLng);
+  }
+
   /** Calculate distance in km using Haversine formula */
   calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const R = 6371;

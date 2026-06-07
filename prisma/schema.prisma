@@ -501,6 +501,7 @@ model Order {
   weatherMultiplier   Float          @default(1)
   tipAmount           Float          @default(0)
   deliveryCode        String?
+  distanceKm          Float?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 

@@ -67,10 +67,14 @@ export class OrdersService {
         return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
       };
 
-      const distanceKm = haversine(
-        order.professional.lat, order.professional.lng,
-        order.deliveryLat, order.deliveryLng,
-      );
+      // Priorité à la distance routière stockée sur l'order (Google Maps),
+      // fallback sur Haversine si le champ est absent (anciennes commandes).
+      const distanceKm = (order as any).distanceKm != null
+        ? Number((order as any).distanceKm)
+        : haversine(
+            order.professional.lat, order.professional.lng,
+            order.deliveryLat, order.deliveryLng,
+          );
       const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
       const deliveryZone = (order as any).deliveryCity ?? order.professional.city ?? '';
 
@@ -355,11 +359,23 @@ export class OrdersService {
     if (professional.lat == null || professional.lng == null) {
       this.logger.warn(`Order creation: professional ${professional.id} has no coordinates, defaulting to Cotonou`);
     }
-    const deliveryFee = await this.geo.calculateDeliveryFee(
-      professional.lat, professional.lng,
-      dto.deliveryLat, dto.deliveryLng,
-      professional.city, dto.deliveryCity,
-    );
+    // Calcul parallèle : frais de livraison + distance routière réelle (Google Maps)
+    // getRoutingDistance utilise l'API Distance Matrix et bascule sur Haversine si
+    // GOOGLE_MAPS_API_KEY est absent ou si l'API est indisponible.
+    const proLat = professional.lat != null ? Number(professional.lat) : 6.36;
+    const proLng = professional.lng != null ? Number(professional.lng) : 2.42;
+
+    const [deliveryFee, distanceKm] = await Promise.all([
+      this.geo.calculateDeliveryFee(
+        professional.lat, professional.lng,
+        dto.deliveryLat, dto.deliveryLng,
+        professional.city, dto.deliveryCity,
+      ),
+      this.geo.getRoutingDistance(
+        proLat, proLng,
+        dto.deliveryLat, dto.deliveryLng,
+      ),
+    ]);
 
     // Handle promo code
     let promoDiscount = 0;
@@ -389,6 +405,7 @@ export class OrdersService {
         specialInstructions: dto.specialInstructions,
         scheduledDeliveryAt: dto.scheduledDeliveryAt ? new Date(dto.scheduledDeliveryAt) : null,
         deliveryCode: String(Math.floor(1000 + Math.random() * 9000)),
+        distanceKm,
         items: {
           create: orderItems.map((i) => ({
             productId: i.productId,
