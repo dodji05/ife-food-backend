@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { UploadsService } from '../uploads/uploads.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProfessionalDto, UpdateProfessionalDto, UpdateOpeningHoursDto } from './dto/professional.dto';
@@ -6,6 +6,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class ProfessionalsService {
+  private readonly logger = new Logger(ProfessionalsService.name);
   constructor(private prisma: PrismaService, private uploads: UploadsService) {}
 
   async register(userId: string, dto: CreateProfessionalDto) {
@@ -144,19 +145,12 @@ export class ProfessionalsService {
   }
 
   async getPublicProfile(id: string) {
+    // Requête principale sans produits (évite une dépendance à la relation
+    // Prisma qui peut être désynchronisée après db push partiel).
     const prof = await this.prisma.professional.findUnique({
       where: { id, status: 'VALIDATED' },
       include: {
-        // Tous les produits (disponibles ET rupture/indisponibles) pour que
-        // le mobile puisse les afficher avec les badges appropriés.
-        // Le filtre isAvailable:true était trop restrictif : un produit
-        // temporairement en rupture de stock disparaissait du menu.
-        products: {
-          include: { category: true },
-          orderBy: [{ categoryId: 'asc' }, { createdAt: 'asc' }],
-        },
         // Catégories du pro pour le groupement dans le menu
-        // (champ Prisma = sortOrder, pas order)
         productCategories: { orderBy: { sortOrder: 'asc' } },
         reviews: {
           include: { reviewer: { select: { name: true, avatarUrl: true } } },
@@ -166,6 +160,41 @@ export class ProfessionalsService {
       },
     });
     if (!prof) throw new NotFoundException('Establishment not found');
+
+    // Chargement des produits via findMany explicite — indépendant de la
+    // relation Prisma. Inclut toutes les catégories (globales + pro-spécifiques)
+    // pour que les produits créés depuis l'admin (catégories globales) soient
+    // bien retournés. C'est plus robuste que `include: { products }` sur le
+    // findUnique ci-dessus qui peut rater les produits sous catégories globales
+    // si la relation Prisma est désynchronisée.
+    const products = await this.prisma.product.findMany({
+      where: { professionalId: id },
+      include: { category: true },
+      orderBy: [{ categoryId: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    this.logger.log(`getPublicProfile id=${id} → ${products.length} produit(s) trouvé(s)`);
+
+    // Catégories référencées par les produits mais absentes de productCategories
+    // (catégories globales, professionalId = null, créées depuis l'admin).
+    // On les charge séparément et on les fusionne pour que le mobile puisse
+    // afficher les labels corrects dans le sélecteur de catégories.
+    const proSpecificCatIds = new Set(prof.productCategories.map((c: any) => c.id));
+    const globalCatIds = [...new Set(
+      products
+        .map((p) => p.categoryId)
+        .filter((catId): catId is string => !!catId && !proSpecificCatIds.has(catId))
+    )];
+
+    const globalCategories = globalCatIds.length > 0
+      ? await this.prisma.productCategory.findMany({
+          where: { id: { in: globalCatIds } },
+          orderBy: { sortOrder: 'asc' },
+        })
+      : [];
+
+    const allCategories = [...prof.productCategories, ...globalCategories]
+      .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
     // Note moyenne + nombre total de reviews (requêtes séparées car _count
     // dans findUnique n'est pas typé correctement par Prisma TS generator).
@@ -185,6 +214,10 @@ export class ProfessionalsService {
     return {
       data: {
         ...prof,
+        // Produits chargés explicitement (voir commentaire ci-dessus)
+        products,
+        // Catégories fusionnées : pro-spécifiques + globales utilisées par les produits
+        productCategories: allCategories,
         // Champs aplatis pour le mobile
         avgRating: Math.round(avgRating * 10) / 10,
         reviewCount,
