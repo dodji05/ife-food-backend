@@ -33,4 +33,22 @@ export class SearchController {
       limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
+
+  /**
+   * GET /search/trending?country=BJ
+   *
+   * Données pour le panneau "Idées de recherche" affiché avant que
+   * l'utilisateur ait commencé à taper. Retourne :
+   *   • catégories les plus utilisées (par nombre de produits publiés)
+   *   • établissements populaires (par note moyenne)
+   *
+   * Public, sans auth.
+   */
+  @Get('trending')
+  @Public()
+  @ApiOperation({ summary: 'Idées de recherche / tendances depuis la BDD' })
+  @ApiQuery({ name: 'country', required: false })
+  trending(@Query('country') country?: string) {
+    return this.search.trending({ country });
+  }
 }
