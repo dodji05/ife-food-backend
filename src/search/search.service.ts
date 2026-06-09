@@ -104,9 +104,12 @@ export class SearchService {
 
     // ── Catégories ────────────────────────────────────────────────────────────
     try {
+      // Pas de DISTINCT ici : c.id est déjà unique (PK). Avec DISTINCT,
+      // Postgres refuse `ORDER BY c.name->>'fr'` si l'expression n'apparait
+      // pas dans la liste DISTINCT → erreur silencieuse côté catch.
       categories = await this.prisma.$queryRawUnsafe<any[]>(
         `
-        SELECT DISTINCT c.id, c.name, c.icon
+        SELECT c.id, c.name, c.icon
         FROM "product_categories" c
         WHERE COALESCE(c.name->>'fr', '') ILIKE $1
            OR COALESCE(c.name->>'en', '') ILIKE $1
