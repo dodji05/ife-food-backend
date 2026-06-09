@@ -180,6 +180,25 @@ export class ProfessionalsService {
 
     this.logger.log(`getPublicProfile id=${id} → ${products.length} produit(s) trouvé(s)`);
 
+    // ── Sanitisation variants/options ───────────────────────────────────────
+    // En BDD certains produits ont des `variants` et `options` stockés sous la
+    // forme [[]] (liste de listes vides) au lieu de [{…}] — saisie admin
+    // malformée. Côté mobile, le parser Product.fromJson Dart fait
+    // `Map<String, dynamic>.from(e)` sur chaque élément ; appliqué à une List,
+    // ça lève une exception non catchée et casse l'affichage du menu entier.
+    // On filtre ici pour ne garder que les vrais objets (non-null, non-array).
+    const sanitizedProducts = products.map((p) => {
+      const cleanArr = (raw: any) =>
+        Array.isArray(raw)
+          ? raw.filter((v) => v != null && typeof v === 'object' && !Array.isArray(v))
+          : raw;
+      return {
+        ...p,
+        variants: cleanArr((p as any).variants),
+        options:  cleanArr((p as any).options),
+      };
+    });
+
     // Catégories référencées par les produits mais absentes de productCategories
     // (catégories globales, professionalId = null, créées depuis l'admin).
     // On les charge séparément et on les fusionne pour que le mobile puisse
@@ -220,7 +239,7 @@ export class ProfessionalsService {
       data: {
         ...prof,
         // Produits chargés explicitement (voir commentaire ci-dessus)
-        products,
+        products: sanitizedProducts,
         // Catégories fusionnées : pro-spécifiques + globales utilisées par les produits
         productCategories: allCategories,
         // Champs aplatis pour le mobile
