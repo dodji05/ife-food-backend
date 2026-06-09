@@ -34,7 +34,7 @@ export class ReorderCategoriesDto {
 }
 
 export class CreateProductDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() categoryId?: string;
+  @ApiProperty({ description: 'ID de la catégorie (obligatoire)' }) @IsString() categoryId: string;
   @ApiProperty({ description: 'Multilingual: { fr: "...", en: "..." }' })
   @IsNotEmptyObject() name: any;
   @ApiPropertyOptional() @IsOptional() @IsObject() description?: any;
