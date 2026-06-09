@@ -16,16 +16,10 @@ export class AuthService {
   ) {}
 
   /** Step 1: Send OTP */
-  async sendOtp(phone: string, countryCode: string): Promise<{ sessionId: string; otp?: string }> {
+  async sendOtp(phone: string, countryCode: string): Promise<{ sessionId: string }> {
     const channel = this.config.get('OTP_CHANNEL', 'SMS') as 'SMS' | 'WHATSAPP';
-    const { sessionId, code } = await this.otpService.createOtpSession(phone, channel);
-
-    const isProd = this.config.get('NODE_ENV') === 'production';
-    return {
-      sessionId,
-      // Exposé uniquement hors production pour faciliter les tests
-      ...(!isProd && { otp: code }),
-    };
+    const { sessionId } = await this.otpService.createOtpSession(phone, channel);
+    return { sessionId };
   }
 
   /** Step 2: Verify OTP and login/register */

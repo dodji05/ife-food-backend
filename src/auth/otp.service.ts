@@ -72,10 +72,6 @@ export class OtpService {
 
   private async sendOtp(phone: string, code: string, channel: 'SMS' | 'WHATSAPP') {
     const message = `Your ifè FOOD verification code is: ${code}. Valid for 5 minutes.`;
-    if (this.config.get('NODE_ENV') === 'development') {
-      this.logger.log(`[DEV OTP] ${phone}: ${code}`);
-      return;
-    }
     if (channel === 'SMS') await this.sendSms(phone, message);
     else await this.sendWhatsapp(phone, message);
   }
