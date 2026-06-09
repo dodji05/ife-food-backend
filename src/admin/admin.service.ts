@@ -563,7 +563,7 @@ export class AdminService {
 
   // ─── CATALOGUE ADMIN ─────────────────────
   async getCatalogueForPro(proId: string) {
-    const [professional, categories] = await Promise.all([
+    const [professional, categories, uncategorizedProducts] = await Promise.all([
       this.prisma.professional.findUnique({ where: { id: proId }, select: { id: true, businessName: true, category: true, city: true } }),
       this.prisma.productCategory.findMany({
         // Toutes les catégories (globales + legacy pro) — cohérent avec getGlobalCategories
@@ -575,9 +575,15 @@ export class AdminService {
           },
         },
       }),
+      // Produits sans catégorie (categoryId = null) — invisibles sinon car pas
+      // rattachés à une ProductCategory.
+      this.prisma.product.findMany({
+        where: { professionalId: proId, categoryId: null },
+        orderBy: { createdAt: 'asc' },
+      }),
     ]);
     if (!professional) throw new NotFoundException('Professionnel introuvable');
-    return { data: { professional, categories } };
+    return { data: { professional, categories, uncategorizedProducts } };
   }
 
   async createCatalogueCategory(proId: string, dto: { name: any; icon?: string }) {
