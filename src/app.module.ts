@@ -23,6 +23,7 @@ import { UserAddressesModule } from './user-addresses/user-addresses.module';
 import { PromoModule } from './promo/promo.module';
 import { ConfigAppModule } from './config/config.module';
 import { TasksModule } from './tasks/tasks.module';
+import { SearchModule } from './search/search.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { TasksModule } from './tasks/tasks.module';
     PromoModule,
     ConfigAppModule,
     TasksModule,
+    SearchModule,
   ],
 })
 export class AppModule {}
