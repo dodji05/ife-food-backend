@@ -173,12 +173,7 @@ export class ProfessionalsService {
     // findUnique ci-dessus qui peut rater les produits sous catégories globales
     // si la relation Prisma est désynchronisée.
     const products = await this.prisma.product.findMany({
-      // On exclut volontairement les produits sans catégorie (categoryId = null).
-      // La catégorie est désormais obligatoire à la création. Un produit orphelin
-      // (créé avant cette règle) ne doit pas bloquer l'affichage de tous les autres
-      // sur le mobile (le chip '__other__' casse le rendu du TabBarView). L'admin
-      // peut corriger ces produits via la vue "⚠️ Sans catégorie" du catalogue.
-      where: { professionalId: id, categoryId: { not: null } },
+      where: { professionalId: id },
       include: { category: true },
       orderBy: [{ categoryId: 'asc' }, { createdAt: 'asc' }],
     });
