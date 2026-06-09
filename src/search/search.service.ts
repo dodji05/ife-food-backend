@@ -1,24 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 
 /**
  * Recherche unifiée pour le client mobile.
  *
- * Approche hybride :
- *   • Pour les champs string natifs (businessName, description, city) on
- *     utilise Prisma classique avec `mode: 'insensitive'` — plus lisible,
- *     plus sûr et plus facile à maintenir.
- *   • Pour les champs JSON multilingues (`name` produit/catégorie) on
- *     passe par `$queryRawUnsafe` avec paramètres `$1` numérotés —
- *     `mode: 'insensitive'` ne fonctionne pas avec `path: ['fr'], string_contains`
- *     sur PostgreSQL (Prisma quote la valeur sans appliquer la collation).
- *
- * Les requêtes raw utilisent `$queryRawUnsafe(sql, ...params)` qui paramétrise
- * les arguments → zéro injection. L'usage de `Prisma.sql` tagged template
- * avec interpolation conditionnelle (`Prisma.empty`) que j'avais tenté
- * en V1 retournait silencieusement 0 ligne en prod — la forme `Unsafe + $N`
- * est plus robuste.
+ * Toutes les requêtes passent par `$queryRawUnsafe(sql, ...params)` :
+ *   • ILIKE PostgreSQL natif → case-insensitive sur string ET sur JSON path
+ *     (`name->>'fr'`), ce que `prisma.findMany` ne propose pas pour les JSON.
+ *   • Paramétrage `$1, $2, ...` → zéro injection.
+ *   • Trois `try/catch` indépendants : si une requête échoue, les deux
+ *     autres restent disponibles (avant ça donnait "tout vide" sans
+ *     visibilité sur la cause).
+ *   • `LIMIT ${limit}` interpolé inline (sûr car borné dans [1,10]) pour
+ *     éviter les conflits de numérotation $N avec les filtres optionnels
+ *     (country).
  */
 @Injectable()
 export class SearchService {
@@ -36,30 +31,45 @@ export class SearchService {
     const prefix = `${q}%`;
     const country = opts.country?.trim();
 
-    try {
-      // ── Établissements (Prisma classique) ──────────────────────────────────
-      const proWhere: Prisma.ProfessionalWhereInput = {
-        status: 'VALIDATED',
-        ...(country ? { country } : {}),
-        OR: [
-          { businessName: { contains: q, mode: 'insensitive' } },
-          { description:  { contains: q, mode: 'insensitive' } },
-          { city:         { contains: q, mode: 'insensitive' } },
-        ],
-      };
-      const establishments = await this.prisma.professional.findMany({
-        where: proWhere,
-        select: {
-          id: true, businessName: true, category: true,
-          logoUrl: true, coverImageUrl: true, city: true,
-          isOpen: true, country: true,
-        },
-        orderBy: { businessName: 'asc' },
-        take: limit,
-      });
+    // Les 3 requêtes sont isolées dans des try/catch séparés pour qu'un
+    // souci sur une seule n'éteigne pas les deux autres (sinon on revient
+    // au symptôme "tout vide" sans visibilité).
+    let establishments: any[] = [];
+    let products: any[]       = [];
+    let categories: any[]     = [];
 
-      // ── Produits (raw SQL pour JSON multilingue) ───────────────────────────
-      const products = await this.prisma.$queryRawUnsafe<any[]>(
+    // ── Établissements ────────────────────────────────────────────────────────
+    try {
+      establishments = await this.prisma.$queryRawUnsafe<any[]>(
+        `
+        SELECT id, "businessName", category::text AS category,
+               "logoUrl", "coverImageUrl", city, "isOpen", country
+        FROM "professionals"
+        WHERE status = 'VALIDATED'
+          ${country ? 'AND country = $3' : ''}
+          AND (
+            "businessName" ILIKE $1
+            OR COALESCE(description, '') ILIKE $1
+            OR COALESCE(city, '')        ILIKE $1
+            OR CAST(category AS TEXT)    ILIKE $1
+          )
+        ORDER BY
+          CASE
+            WHEN "businessName" ILIKE $2 THEN 0
+            ELSE 1
+          END,
+          "businessName" ASC
+        LIMIT ${limit}
+        `,
+        like, prefix, ...(country ? [country] : []),
+      );
+    } catch (e: any) {
+      this.logger.error(`suggest establishments q="${q}" failed: ${e?.message}`);
+    }
+
+    // ── Produits ──────────────────────────────────────────────────────────────
+    try {
+      products = await this.prisma.$queryRawUnsafe<any[]>(
         `
         SELECT p.id, p.name, p.description, p.price, p.currency,
                p."imageUrl", p."categoryId", p."professionalId",
@@ -70,7 +80,7 @@ export class SearchService {
         JOIN "professionals" prof ON prof.id = p."professionalId"
         WHERE p."isAvailable" = true
           AND prof.status     = 'VALIDATED'
-          ${country ? 'AND prof.country = $4' : ''}
+          ${country ? 'AND prof.country = $3' : ''}
           AND (
             COALESCE(p.name->>'fr', '')        ILIKE $1
             OR COALESCE(p.name->>'en', '')     ILIKE $1
@@ -84,33 +94,36 @@ export class SearchService {
             ELSE 1
           END,
           p.name->>'fr' ASC
-        LIMIT $3
+        LIMIT ${limit}
         `,
-        like, prefix, limit, ...(country ? [country] : []),
+        like, prefix, ...(country ? [country] : []),
       );
+    } catch (e: any) {
+      this.logger.error(`suggest products q="${q}" failed: ${e?.message}`);
+    }
 
-      // ── Catégories (raw SQL) ───────────────────────────────────────────────
-      const categories = await this.prisma.$queryRawUnsafe<any[]>(
+    // ── Catégories ────────────────────────────────────────────────────────────
+    try {
+      categories = await this.prisma.$queryRawUnsafe<any[]>(
         `
         SELECT DISTINCT c.id, c.name, c.icon
         FROM "product_categories" c
         WHERE COALESCE(c.name->>'fr', '') ILIKE $1
            OR COALESCE(c.name->>'en', '') ILIKE $1
         ORDER BY c.name->>'fr' ASC
-        LIMIT $2
+        LIMIT ${limit}
         `,
-        like, limit,
+        like,
       );
-
-      this.logger.log(
-        `suggest q="${q}" → ${establishments.length} pros, ${products.length} produits, ${categories.length} catégories`,
-      );
-
-      return { data: { establishments, products, categories } };
     } catch (e: any) {
-      this.logger.error(`suggest q="${q}" failed: ${e?.message}`, e?.stack);
-      return { data: { establishments: [], products: [], categories: [] } };
+      this.logger.error(`suggest categories q="${q}" failed: ${e?.message}`);
     }
+
+    this.logger.log(
+      `suggest q="${q}" → ${establishments.length} pros, ${products.length} produits, ${categories.length} catégories`,
+    );
+
+    return { data: { establishments, products, categories } };
   }
 
   // ── Tendances / idées de recherche depuis la BDD ───────────────────────────
