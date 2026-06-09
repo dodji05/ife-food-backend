@@ -2308,4 +2308,22 @@ export class AdminService {
     ]);
     return { data: { deleted: true } };
   }
+
+  // ─── CONFIGURATION NOTIFICATIONS VIREMENT ───────────────────────────────────
+  async getWithdrawalNotificationConfig() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'withdrawalNotification' } });
+    return { data: { email: (cfg?.value as any)?.email ?? 'dgaservicesint@gmail.com' } };
+  }
+
+  async setWithdrawalNotificationConfig(email: string) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('Adresse email invalide.');
+    }
+    const cfg = await this.prisma.platformConfig.upsert({
+      where:  { key: 'withdrawalNotification' },
+      update: { value: { email } },
+      create: { key: 'withdrawalNotification', value: { email } },
+    });
+    return { data: { email: (cfg.value as any).email } };
+  }
 }

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
 import { JWT } from 'google-auth-library';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -166,6 +167,100 @@ export class NotificationsService implements OnModuleInit {
 
   async markAllRead(userId: string) {
     return this.prisma.notification.updateMany({ where: { userId, read: false }, data: { read: true } });
+  }
+
+  /**
+   * Envoie un email via SMTP (nodemailer).
+   * Si les variables SMTP_HOST / SMTP_USER / SMTP_PASS ne sont pas configurées,
+   * l'email est simplement ignoré (best-effort) sans lever d'exception.
+   */
+  async sendEmail(to: string, subject: string, html: string): Promise<void> {
+    const host = this.config.get<string>('SMTP_HOST');
+    const port = Number(this.config.get('SMTP_PORT') ?? 587);
+    const user = this.config.get<string>('SMTP_USER');
+    const pass = this.config.get<string>('SMTP_PASS');
+    const from = this.config.get<string>('SMTP_FROM') ?? user ?? 'noreply@ifefood.app';
+
+    if (!host || !user || !pass) {
+      this.logger.warn(`Email non envoyé (SMTP non configuré) — sujet : ${subject}`);
+      return;
+    }
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass },
+      });
+      await transporter.sendMail({ from, to, subject, html });
+      this.logger.log(`✉️  Email envoyé à ${to} : ${subject}`);
+    } catch (err: any) {
+      this.logger.error(`Échec envoi email à ${to} : ${err.message}`);
+    }
+  }
+
+  /**
+   * Notifie tous les administrateurs d'une nouvelle demande de virement.
+   * 1. Notification in-app pour tous les comptes ADMIN.
+   * 2. Email vers l'adresse configurée dans platformConfig (clé "withdrawalNotification").
+   *    Adresse par défaut : dgaservicesint@gmail.com.
+   */
+  async notifyAdminsWithdrawalRequest(opts: {
+    entityName: string;
+    entityType: 'professional' | 'driver';
+    amount: number;
+    currency: string;
+    paymentInfo?: string;
+    transactionId: string;
+  }): Promise<void> {
+    const { entityName, entityType, amount, currency, paymentInfo, transactionId } = opts;
+    const typeLabel = entityType === 'professional' ? 'Établissement' : 'Livreur';
+    const title = `💰 Demande de virement — ${entityName}`;
+    const body  = `${typeLabel} ${entityName} demande un virement de ${amount.toLocaleString('fr-FR')} ${currency}${paymentInfo ? ` via ${paymentInfo}` : ''}`;
+
+    // 1. Notifications in-app pour tous les admins
+    await this.sendToAllUsers(title, body, 'ADMIN');
+
+    // 2. Email
+    try {
+      const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'withdrawalNotification' } });
+      const email: string = (cfg?.value as any)?.email ?? 'dgaservicesint@gmail.com';
+      const dateStr = new Date().toLocaleString('fr-FR', { timeZone: 'Africa/Porto-Novo' });
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:8px">
+          <h2 style="color:#16a34a;margin-bottom:16px">💰 Nouvelle demande de virement</h2>
+          <table style="width:100%;border-collapse:collapse">
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:8px 0;color:#6b7280;font-size:14px;width:160px"><strong>Entité</strong></td>
+              <td style="padding:8px 0;font-size:14px">${typeLabel} — ${entityName}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:8px 0;color:#6b7280;font-size:14px"><strong>Montant</strong></td>
+              <td style="padding:8px 0;font-size:14px;font-weight:bold">${amount.toLocaleString('fr-FR')} ${currency}</td>
+            </tr>
+            ${paymentInfo ? `
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:8px 0;color:#6b7280;font-size:14px"><strong>Moyen de paiement</strong></td>
+              <td style="padding:8px 0;font-size:14px">${paymentInfo}</td>
+            </tr>` : ''}
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:8px 0;color:#6b7280;font-size:14px"><strong>Référence</strong></td>
+              <td style="padding:8px 0;font-size:13px;font-family:monospace;color:#374151">${transactionId}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0;color:#6b7280;font-size:14px"><strong>Date</strong></td>
+              <td style="padding:8px 0;font-size:14px">${dateStr}</td>
+            </tr>
+          </table>
+          <p style="margin-top:20px;font-size:13px;color:#6b7280">
+            Connectez-vous à l'espace admin pour traiter cette demande.
+          </p>
+        </div>
+      `;
+      await this.sendEmail(email, `[IFÈ FOOD] Demande de virement — ${entityName} (${amount.toLocaleString('fr-FR')} ${currency})`, html);
+    } catch (err: any) {
+      this.logger.error(`notifyAdminsWithdrawalRequest email failed: ${err.message}`);
+    }
   }
 
   /**

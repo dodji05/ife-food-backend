@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
@@ -19,6 +19,8 @@ const DEFAULT_VEHICLE_CAPACITIES: Record<string, number> = {
 
 @Injectable()
 export class DriversService {
+  private readonly logger = new Logger(DriversService.name);
+
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
@@ -371,6 +373,19 @@ export class DriversService {
           : `Demande de virement — ${new Date().toLocaleDateString('fr-FR')}`,
       },
     });
+
+    // Notification aux admins (in-app + email) — best-effort
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true, firstName: true } });
+    const entityName = [`${user?.firstName ?? ''}`, `${user?.name ?? ''}`].filter(Boolean).join(' ').trim() || 'Livreur';
+    this.notifications.notifyAdminsWithdrawalRequest({
+      entityName,
+      entityType:    'driver',
+      amount,
+      currency:      'XOF',
+      paymentInfo,
+      transactionId: withdrawal.id,
+    }).catch((e) => this.logger.warn(`notifyAdminsWithdrawalRequest driver: ${e?.message}`));
+
     return { data: withdrawal };
   }
 

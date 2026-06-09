@@ -1,13 +1,18 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { UploadsService } from '../uploads/uploads.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateProfessionalDto, UpdateProfessionalDto, UpdateOpeningHoursDto } from './dto/professional.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class ProfessionalsService {
   private readonly logger = new Logger(ProfessionalsService.name);
-  constructor(private prisma: PrismaService, private uploads: UploadsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private uploads: UploadsService,
+    private notifications: NotificationsService,
+  ) {}
 
   async register(userId: string, dto: CreateProfessionalDto) {
     const existing = await this.prisma.professional.findUnique({ where: { userId } });
@@ -551,6 +556,17 @@ export class ProfessionalsService {
           : `Demande de virement — ${new Date().toLocaleDateString('fr-FR')}`,
       },
     });
+
+    // Notification aux admins (in-app + email) — best-effort
+    this.notifications.notifyAdminsWithdrawalRequest({
+      entityName:    prof.businessName ?? 'Établissement',
+      entityType:    'professional',
+      amount,
+      currency:      'XOF',
+      paymentInfo,
+      transactionId: withdrawal.id,
+    }).catch((e) => this.logger.warn(`notifyAdminsWithdrawalRequest pro: ${e?.message}`));
+
     return { data: withdrawal };
   }
 

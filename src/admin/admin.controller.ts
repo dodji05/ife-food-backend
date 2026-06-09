@@ -504,4 +504,13 @@ export class AdminController {
   @UseGuards(AdminLevelGuard)
   @AdminLevel('SUPER_ADMIN')
   deleteAdminAccount(@Param('id') id: string) { return this.adminService.deleteAdminAccount(id); }
+
+  // ─── CONFIG NOTIFICATIONS VIREMENT ──────────────────────────────────────────
+  @Get('config/withdrawal-notification')
+  getWithdrawalNotificationConfig() { return this.adminService.getWithdrawalNotificationConfig(); }
+
+  @Put('config/withdrawal-notification')
+  setWithdrawalNotificationConfig(@Body('email') email: string) {
+    return this.adminService.setWithdrawalNotificationConfig(email);
+  }
 }
