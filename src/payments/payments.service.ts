@@ -94,8 +94,8 @@ export class PaymentsService {
 
     switch (gw) {
       case PaymentGatewayName.STRIPE: {
-        const intent = await this.stripe.createPaymentIntent(order.totalAmount, order.currency, orderId);
-        const publishableKey = this.stripe.getPublishableKey(dbCreds.STRIPE?.publishableKey);
+        const intent = await this.stripe.createPaymentIntent(order.totalAmount, order.currency, orderId, dbCreds.STRIPE);
+        const publishableKey = this.stripe.getPublishableKey(dbCreds.STRIPE);
         await this.prisma.payment.upsert({
           where: { orderId },
           update: { gatewayRef: intent.id, gatewayData: intent as any, status: 'PENDING' as any },
@@ -115,7 +115,7 @@ export class PaymentsService {
         };
       }
       case PaymentGatewayName.PAYPAL:
-        paymentData = await this.paypal.createOrder(order.totalAmount, order.currency, orderId);
+        paymentData = await this.paypal.createOrder(order.totalAmount, order.currency, orderId, dbCreds.PAYPAL);
         break;
       case PaymentGatewayName.KKIAPAY: {
         const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
@@ -191,9 +191,11 @@ export class PaymentsService {
     let event: any;
     const gw = gateway.toUpperCase() as PaymentGatewayName;
     switch (gw) {
-      case PaymentGatewayName.STRIPE:
+      case PaymentGatewayName.STRIPE: {
         // Stripe constructEvent a besoin du rawBody (Buffer/string) pour sa propre vérif HMAC.
-        event = await this.stripe.constructEvent(rawBody, signature);
+        const stripeCreds = await this.loadGatewayCredentials();
+        event = await this.stripe.constructEvent(rawBody, signature, stripeCreds.STRIPE);
+      }
         if (event.type === 'payment_intent.succeeded') await this.confirmPayment(event.data.object.metadata.orderId, event.data.object.id);
         if (event.type === 'payment_intent.payment_failed') await this.failPayment(event.data.object.metadata.orderId);
         break;
@@ -410,7 +412,8 @@ export class PaymentsService {
         return { data: { status: 'SUCCESS', alreadyConfirmed: true } };
       }
       if (!payment.gatewayRef) return { data: { status: 'PENDING' } };
-      const status = await this.stripe.retrievePaymentIntentStatus(payment.gatewayRef);
+      const stripeCreds = await this.loadGatewayCredentials();
+      const status = await this.stripe.retrievePaymentIntentStatus(payment.gatewayRef, stripeCreds.STRIPE);
       if (status === 'succeeded') {
         await this.confirmPayment(orderId, payment.gatewayRef);
         return { data: { status: 'SUCCESS' } };
@@ -436,7 +439,8 @@ export class PaymentsService {
     const refundAmount = amount ?? payment.amount;
 
     if (payment.gateway === 'STRIPE' && payment.gatewayRef) {
-      await this.stripe.refund(payment.gatewayRef, refundAmount);
+      const stripeCreds = await this.loadGatewayCredentials();
+      await this.stripe.refund(payment.gatewayRef, refundAmount, stripeCreds.STRIPE);
     }
 
     await this.prisma.payment.update({ where: { orderId }, data: { status: 'REFUNDED' as any, refundedAt: new Date(), refundAmount } });
