@@ -505,6 +505,15 @@ export class AdminController {
   @AdminLevel('SUPER_ADMIN')
   deleteAdminAccount(@Param('id') id: string) { return this.adminService.deleteAdminAccount(id); }
 
+  // ─── CONTACTS SUPPORT ────────────────────────────────────────────────────────
+  @Get('config/support-contacts')
+  getSupportContacts() { return this.adminService.getSupportContacts(); }
+
+  @Put('config/support-contacts')
+  setSupportContacts(@Body('contacts') contacts: any[]) {
+    return this.adminService.setSupportContacts(contacts);
+  }
+
   // ─── CONFIG NOTIFICATIONS VIREMENT ──────────────────────────────────────────
   @Get('config/withdrawal-notification')
   getWithdrawalNotificationConfig() { return this.adminService.getWithdrawalNotificationConfig(); }

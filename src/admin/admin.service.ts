@@ -2315,6 +2315,30 @@ export class AdminService {
     return { data: { deleted: true } };
   }
 
+  // ─── CONTACTS SUPPORT ────────────────────────────────────────────────────────
+  async getSupportContacts() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'supportContacts' } });
+    const contacts = (cfg?.value as any)?.contacts ?? [];
+    return { data: { contacts } };
+  }
+
+  async setSupportContacts(contacts: Array<{ id: string; type: string; label: string; value: string }>) {
+    if (!Array.isArray(contacts)) throw new BadRequestException('contacts doit être un tableau');
+    // Validation basique
+    for (const c of contacts) {
+      if (!c.type || !c.value?.trim()) throw new BadRequestException('Chaque contact doit avoir un type et une valeur');
+      if (c.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.value)) {
+        throw new BadRequestException(`Email invalide : ${c.value}`);
+      }
+    }
+    await this.prisma.platformConfig.upsert({
+      where:  { key: 'supportContacts' },
+      update: { value: { contacts } },
+      create: { key: 'supportContacts', value: { contacts } },
+    });
+    return { data: { contacts } };
+  }
+
   // ─── CONFIGURATION NOTIFICATIONS VIREMENT ───────────────────────────────────
   async getWithdrawalNotificationConfig() {
     const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'withdrawalNotification' } });
