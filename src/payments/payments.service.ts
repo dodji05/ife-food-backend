@@ -7,6 +7,7 @@ import { FedapayService } from './gateways/fedapay.service';
 import { ConfigService } from '@nestjs/config';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DeliveriesGateway } from '../deliveries/deliveries.gateway';
+import { GeoService } from '../geo/geo.service';
 
 export enum PaymentGatewayName {
   STRIPE = 'STRIPE',
@@ -27,6 +28,7 @@ export class PaymentsService {
     private config: ConfigService,
     private notifications: NotificationsService,
     private deliveriesGateway: DeliveriesGateway,
+    private geo: GeoService,
   ) {}
 
   private async loadGatewayCredentials(): Promise<any> {
@@ -118,8 +120,22 @@ export class PaymentsService {
         const apiUrl    = this.config.get('API_URL', '');
         const returnUrl = `${apiUrl}/payments/paypal-return`;
         const cancelUrl = `${apiUrl}/payments/paypal-cancel`;
+
+        // ── Conversion de devise si XOF/XAF/GNF… non supporté par PayPal ──
+        const orderCurrency = order.currency.toUpperCase();
+        let paypalAmount   = Number(order.totalAmount);
+        let paypalCurrency = orderCurrency;
+
+        if (!PaypalService.SUPPORTED_CURRENCIES.has(orderCurrency)) {
+          // Devise cible : configurée dans les creds PayPal (admin), sinon USD
+          paypalCurrency = (dbCreds.PAYPAL?.convertToCurrency ?? 'USD').toUpperCase();
+          const rate = await this.geo.getExchangeRate(orderCurrency, paypalCurrency);
+          // Arrondi au centime supérieur pour ne jamais sous-capturer
+          paypalAmount = Math.ceil(Number(order.totalAmount) * rate * 100) / 100;
+        }
+
         const paypalOrder = await this.paypal.createOrder(
-          order.totalAmount, order.currency, orderId, dbCreds.PAYPAL, returnUrl, cancelUrl,
+          paypalAmount, paypalCurrency, orderId, dbCreds.PAYPAL, returnUrl, cancelUrl,
         );
         // Extraire l'URL d'approbation depuis links[rel='approve']
         const approvalLink = (paypalOrder.links as any[])?.find((l: any) => l.rel === 'approve');
@@ -127,22 +143,46 @@ export class PaymentsService {
 
         await this.prisma.payment.upsert({
           where:  { orderId },
-          update: { gatewayRef: paypalOrder.id, gatewayData: paypalOrder, status: 'PENDING' as any },
+          update: {
+            gatewayRef: paypalOrder.id,
+            gatewayData: {
+              ...paypalOrder,
+              // Traçabilité : on garde le montant original de la commande
+              _originalCurrency: order.currency,
+              _originalAmount:   Number(order.totalAmount),
+              _paypalCurrency:   paypalCurrency,
+              _paypalAmount:     paypalAmount,
+            },
+            status: 'PENDING' as any,
+          },
           create: {
             orderId, gateway: 'PAYPAL' as any,
             amount: order.totalAmount, currency: order.currency,
-            gatewayRef: paypalOrder.id, gatewayData: paypalOrder, status: 'PENDING' as any,
+            gatewayRef: paypalOrder.id,
+            gatewayData: {
+              ...paypalOrder,
+              _originalCurrency: order.currency,
+              _originalAmount:   Number(order.totalAmount),
+              _paypalCurrency:   paypalCurrency,
+              _paypalAmount:     paypalAmount,
+            },
+            status: 'PENDING' as any,
           },
         });
         return {
           data: {
-            method:        'PAYPAL',
-            paypal:        true,
+            method:          'PAYPAL',
+            paypal:          true,
             orderId,
-            paypalOrderId: paypalOrder.id,
+            paypalOrderId:   paypalOrder.id,
             approvalUrl,
-            amount:        order.totalAmount,
-            currency:      order.currency,
+            amount:          order.totalAmount,
+            currency:        order.currency,
+            // Infos de conversion pour affichage mobile (optionnel)
+            ...(paypalCurrency !== orderCurrency && {
+              paypalAmount:   paypalAmount,
+              paypalCurrency: paypalCurrency,
+            }),
           },
         };
       }

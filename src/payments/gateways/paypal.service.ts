@@ -63,7 +63,7 @@ export class PaypalService {
    * Devises acceptées par PayPal (liste officielle).
    * XOF et la plupart des devises africaines NE sont PAS supportées.
    */
-  private static readonly SUPPORTED_CURRENCIES = new Set([
+  static readonly SUPPORTED_CURRENCIES = new Set([
     'AUD','BRL','CAD','CNY','CZK','DKK','EUR','GBP','HKD','HUF',
     'ILS','JPY','MYR','MXN','NOK','NZD','PHP','PLN','SGD','SEK',
     'CHF','TWD','THB','USD',
@@ -77,14 +77,6 @@ export class PaypalService {
     returnUrl?: string,
     cancelUrl?: string,
   ) {
-    // Guard devise — PayPal refusera XOF, XAF, GNF, etc.
-    if (!PaypalService.SUPPORTED_CURRENCIES.has(currency.toUpperCase())) {
-      throw new BadRequestException(
-        `PayPal ne supporte pas la devise ${currency}. ` +
-        `Utilisez USD ou EUR (configurez la devise dans Admin → Paramètres).`,
-      );
-    }
-
     const token   = await this.getAccessToken(creds);
     const baseUrl = this.getBaseUrl(creds);
     try {

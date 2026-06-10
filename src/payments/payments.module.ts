@@ -7,6 +7,7 @@ import { KkiapayService } from './gateways/kkiapay.service';
 import { FedapayService } from './gateways/fedapay.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DeliveriesModule } from '../deliveries/deliveries.module';
+import { GeoModule } from '../geo/geo.module';
 
 @Module({
   // NotificationsModule exporte NotificationsService — utilisé par
@@ -14,7 +15,9 @@ import { DeliveriesModule } from '../deliveries/deliveries.module';
   // est arrivée (déclencheur clé du workflow pro).
   // DeliveriesModule exporte DeliveriesGateway — utilisé pour broadcast
   // `new_mission` aux drivers en ligne dès qu'une commande est PAID.
-  imports: [NotificationsModule, DeliveriesModule],
+  // GeoModule exporte GeoService — utilisé pour convertir XOF→USD/EUR
+  // lors du paiement PayPal (PayPal ne supporte pas XOF).
+  imports: [NotificationsModule, DeliveriesModule, GeoModule],
   controllers: [PaymentsController],
   providers: [PaymentsService, StripeService, PaypalService, KkiapayService, FedapayService],
   exports: [PaymentsService],
