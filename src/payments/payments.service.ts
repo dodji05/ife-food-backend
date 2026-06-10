@@ -114,9 +114,38 @@ export class PaymentsService {
           },
         };
       }
-      case PaymentGatewayName.PAYPAL:
-        paymentData = await this.paypal.createOrder(order.totalAmount, order.currency, orderId, dbCreds.PAYPAL);
-        break;
+      case PaymentGatewayName.PAYPAL: {
+        const apiUrl    = this.config.get('API_URL', '');
+        const returnUrl = `${apiUrl}/payments/paypal-return`;
+        const cancelUrl = `${apiUrl}/payments/paypal-cancel`;
+        const paypalOrder = await this.paypal.createOrder(
+          order.totalAmount, order.currency, orderId, dbCreds.PAYPAL, returnUrl, cancelUrl,
+        );
+        // Extraire l'URL d'approbation depuis links[rel='approve']
+        const approvalLink = (paypalOrder.links as any[])?.find((l: any) => l.rel === 'approve');
+        const approvalUrl  = approvalLink?.href ?? null;
+
+        await this.prisma.payment.upsert({
+          where:  { orderId },
+          update: { gatewayRef: paypalOrder.id, gatewayData: paypalOrder, status: 'PENDING' as any },
+          create: {
+            orderId, gateway: 'PAYPAL' as any,
+            amount: order.totalAmount, currency: order.currency,
+            gatewayRef: paypalOrder.id, gatewayData: paypalOrder, status: 'PENDING' as any,
+          },
+        });
+        return {
+          data: {
+            method:        'PAYPAL',
+            paypal:        true,
+            orderId,
+            paypalOrderId: paypalOrder.id,
+            approvalUrl,
+            amount:        order.totalAmount,
+            currency:      order.currency,
+          },
+        };
+      }
       case PaymentGatewayName.KKIAPAY: {
         const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
         const gateways = (platformCfg?.value as any) ?? {};
@@ -217,8 +246,98 @@ export class PaymentsService {
         }
         break;
       }
+      case PaymentGatewayName.PAYPAL: {
+        // PayPal envoie event_type + resource
+        const eventType: string = payload?.event_type ?? '';
+        if (eventType === 'PAYMENT.CAPTURE.COMPLETED') {
+          // resource.custom_id = notre orderId (défini dans purchase_units[0].custom_id)
+          const orderId: string | undefined =
+            payload?.resource?.custom_id ??
+            payload?.resource?.purchase_units?.[0]?.custom_id;
+          const captureId: string | undefined = payload?.resource?.id;
+          if (orderId && captureId) {
+            await this.confirmPayment(orderId, captureId).catch(() => {/* idempotent */});
+          }
+        } else if (
+          eventType === 'PAYMENT.CAPTURE.DENIED' ||
+          eventType === 'PAYMENT.CAPTURE.DECLINED'
+        ) {
+          const orderId: string | undefined =
+            payload?.resource?.custom_id ??
+            payload?.resource?.purchase_units?.[0]?.custom_id;
+          if (orderId) await this.failPayment(orderId).catch(() => {});
+        } else if (eventType === 'CHECKOUT.ORDER.APPROVED') {
+          // L'utilisateur a approuvé — on déclenche la capture immédiatement
+          const paypalOrderId: string | undefined = payload?.resource?.id;
+          const orderId: string | undefined =
+            payload?.resource?.purchase_units?.[0]?.custom_id;
+          if (orderId && paypalOrderId) {
+            await this.capturePaypalPayment(orderId).catch(() => {/* best-effort */});
+          }
+        }
+        break;
+      }
     }
     return { received: true };
+  }
+
+  /**
+   * Capture un paiement PayPal après approbation par l'utilisateur.
+   * Appelé depuis le mobile (POST /payments/:orderId/capture-paypal)
+   * ET depuis le webhook CHECKOUT.ORDER.APPROVED.
+   * Idempotent : retourne SUCCESS si déjà capturé.
+   */
+  async capturePaypalPayment(orderId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { orderId } });
+    if (!payment || (payment.gateway as string) !== 'PAYPAL') {
+      throw new BadRequestException('Aucun paiement PayPal trouvé pour cette commande');
+    }
+    // Idempotence — déjà confirmé
+    if ((payment.status as string) === 'SUCCESS') {
+      return { data: { status: 'SUCCESS', alreadyConfirmed: true } };
+    }
+
+    const paypalOrderId = payment.gatewayRef;
+    if (!paypalOrderId) throw new BadRequestException('PayPal order ID introuvable');
+
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const dbCreds = await this.loadGatewayCredentials();
+    try {
+      const capture = await this.paypal.captureOrder(paypalOrderId, dbCreds.PAYPAL);
+
+      // Validation du montant capturé vs montant attendu (anti-manipulation)
+      const capturedValue = Number(
+        capture?.purchase_units?.[0]?.payments?.captures?.[0]?.amount?.value ?? 0,
+      );
+      const expectedValue = Number(order.totalAmount);
+      if (capturedValue > 0 && capturedValue < expectedValue - 0.01) {
+        await this.failPayment(orderId).catch(() => {});
+        return { data: { status: 'FAILED', reason: 'amount_mismatch' } };
+      }
+
+      // Vérification du statut de capture (peut être PENDING si sous revue)
+      const captureStatus: string =
+        capture?.purchase_units?.[0]?.payments?.captures?.[0]?.status ?? capture?.status ?? '';
+      if (captureStatus && captureStatus !== 'COMPLETED') {
+        // PENDING = sous revue PayPal — on n'échoue pas, on attend le webhook
+        return { data: { status: 'PENDING', captureStatus } };
+      }
+
+      const captureId: string =
+        capture?.purchase_units?.[0]?.payments?.captures?.[0]?.id ?? paypalOrderId;
+      await this.confirmPayment(orderId, captureId);
+      return { data: { status: 'SUCCESS' } };
+    } catch (e: any) {
+      // Idempotence : PayPal signale que l'ordre est déjà capturé
+      if ((e as any).paypalIssue === 'ORDER_ALREADY_CAPTURED') {
+        await this.confirmPayment(orderId, paypalOrderId).catch(() => {});
+        return { data: { status: 'SUCCESS', alreadyConfirmed: true } };
+      }
+      await this.failPayment(orderId).catch(() => {});
+      throw e;
+    }
   }
 
   async confirmPayment(orderId: string, gatewayRef: string) {
@@ -407,6 +526,7 @@ export class PaymentsService {
     const gw = payment.gateway as string;
     if (gw === 'FEDAPAY')  return this.checkFedapayPayment(orderId);
     if (gw === 'KKIAPAY')  return this.verifyKkiapayPayment(orderId, '');
+    if (gw === 'PAYPAL')   return this.capturePaypalPayment(orderId);
     if (gw === 'STRIPE') {
       if ((payment.status as string) === 'SUCCESS') {
         return { data: { status: 'SUCCESS', alreadyConfirmed: true } };
