@@ -286,6 +286,14 @@ export class AdminController {
   @Put('config/delivery-mode')
   setDeliveryModeConfig(@Body('activeMode') activeMode: string) { return this.adminService.setDeliveryModeConfig(activeMode); }
 
+  @Get('config/km-delivery')
+  getKmDeliveryConfig() { return this.adminService.getKmDeliveryConfig(); }
+
+  @Put('config/km-delivery')
+  setKmDeliveryConfig(@Body() dto: { baseFee: number; perKmFee: number; currency?: string }) {
+    return this.adminService.setKmDeliveryConfig(dto);
+  }
+
   // PAYMENTS
   @Get('payments/stats')
   getPaymentStats() { return this.adminService.getPaymentStats(); }

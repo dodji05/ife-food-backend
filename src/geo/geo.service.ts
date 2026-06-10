@@ -112,43 +112,17 @@ export class GeoService {
       }
     }
 
-    // ── km mode : frais de base + (distance × tarif/km) ────────────────────
+    // ── km mode : config globale unique (baseFee + perKmFee) ───────────────
     if (activeMode === 'km') {
-      const tc = toCity?.trim();
-      let zone = null;
-
-      if (tc) {
-        // 1. Correspondance exacte sur toCity de la zone (taux spécifique à la ville)
-        zone = await this.prisma.deliveryZone.findFirst({
-          where: { toCity: { equals: tc, mode: 'insensitive' }, perKmFee: { gt: 0 }, isActive: true },
-        });
-        // 2. Correspondance sur le nom de la zone
-        if (!zone) {
-          zone = await this.prisma.deliveryZone.findFirst({
-            where: { name: { contains: tc, mode: 'insensitive' }, perKmFee: { gt: 0 }, isActive: true },
-          });
-        }
-      }
-      // 3. Taux universel : première zone km active
-      if (!zone) {
-        zone = await this.prisma.deliveryZone.findFirst({
-          where: { perKmFee: { gt: 0 }, isActive: true },
-          orderBy: { createdAt: 'asc' },
-        });
-      }
-
-      if (zone) {
-        const baseFee = Number(zone.baseFee);
-        const perKmFee = Number(zone.perKmFee);
-        // Arrondi final pour XOF (pas de décimales)
-        const fee = Math.round((baseFee + perKmFee * distance) * weatherMultiplier);
-        this.logger.log(
-          `KM mode: zone="${zone.name}" baseFee=${baseFee} + ${distance.toFixed(2)}km × ${perKmFee} = ${(baseFee + perKmFee * distance).toFixed(2)} × weather${weatherMultiplier} → ${fee} XOF`,
-        );
-        return fee;
-      }
-
-      this.logger.warn(`KM mode: no active km zone configured, falling back to distance`);
+      const kmCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'kmDeliveryConfig' } });
+      const raw    = (kmCfg?.value as any) ?? {};
+      const baseFee  = Number(raw.baseFee  ?? 500);
+      const perKmFee = Number(raw.perKmFee ?? 150);
+      const fee = Math.round((baseFee + perKmFee * distance) * weatherMultiplier);
+      this.logger.log(
+        `KM mode (global): baseFee=${baseFee} + ${distance.toFixed(2)}km × ${perKmFee} = ${(baseFee + perKmFee * distance).toFixed(2)} × weather${weatherMultiplier} → ${fee} XOF`,
+      );
+      return fee;
     }
 
     // ── zone mode : tarif fixe — matching par ville de livraison ───────────

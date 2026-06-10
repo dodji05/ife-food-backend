@@ -1572,6 +1572,32 @@ export class AdminService {
     return { activeMode };
   }
 
+  async getKmDeliveryConfig() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'kmDeliveryConfig' } });
+    const raw = (cfg?.value as any) ?? {};
+    return {
+      baseFee:  raw.baseFee  ?? 500,
+      perKmFee: raw.perKmFee ?? 150,
+      currency: raw.currency ?? 'XOF',
+    };
+  }
+
+  async setKmDeliveryConfig(dto: { baseFee: number; perKmFee: number; currency?: string }) {
+    if (dto.baseFee == null || isNaN(Number(dto.baseFee)))   throw new BadRequestException('Frais de base requis');
+    if (dto.perKmFee == null || isNaN(Number(dto.perKmFee))) throw new BadRequestException('Frais par km requis');
+    const value = {
+      baseFee:  Number(dto.baseFee),
+      perKmFee: Number(dto.perKmFee),
+      currency: dto.currency ?? 'XOF',
+    };
+    await this.prisma.platformConfig.upsert({
+      where:  { key: 'kmDeliveryConfig' },
+      update: { value },
+      create: { key: 'kmDeliveryConfig', value },
+    });
+    return value;
+  }
+
   async getDeliveryZones() {
     return this.prisma.deliveryZone.findMany({ orderBy: { createdAt: 'asc' } });
   }
