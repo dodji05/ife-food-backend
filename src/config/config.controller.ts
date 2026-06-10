@@ -21,4 +21,11 @@ export class ConfigController {
   getBanners(@Query('country') country?: string) {
     return this.configService.getBanners(country);
   }
+
+  @Get('support-contacts')
+  @Public()
+  @ApiOperation({ summary: 'Get support contact list (email, whatsapp, phone…)' })
+  getSupportContacts() {
+    return this.configService.getSupportContacts();
+  }
 }

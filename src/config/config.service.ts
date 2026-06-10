@@ -29,4 +29,11 @@ export class ConfigAppService {
   async getConfig(key: string) {
     return this.prisma.platformConfig.findUnique({ where: { key } });
   }
+
+  async getSupportContacts() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'supportContacts' } });
+    const contacts: Array<{ id: string; type: string; label: string; value: string }> =
+      (cfg?.value as any)?.contacts ?? [];
+    return { data: { contacts } };
+  }
 }
