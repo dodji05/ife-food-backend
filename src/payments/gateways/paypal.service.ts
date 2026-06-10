@@ -32,17 +32,42 @@ export class PaypalService {
   }
 
   private async getAccessToken(creds?: PaypalCreds): Promise<string> {
-    const { data } = await axios.post(
-      `${this.getBaseUrl(creds)}/v1/oauth2/token`,
-      'grant_type=client_credentials',
-      { auth: { username: this.getClientId(creds), password: this.getClientSecret(creds) } },
-    );
-    // Guard : si PayPal répond 200 sans access_token (rate-limit, mauvais body)
-    if (!data?.access_token) {
-      throw new BadRequestException('PayPal OAuth: access_token absent de la réponse');
+    const clientId     = this.getClientId(creds);
+    const clientSecret = this.getClientSecret(creds);
+    if (!clientId || !clientSecret) {
+      throw new BadRequestException(
+        'PayPal non configuré : CLIENT_ID et CLIENT_SECRET requis (admin → Paiements)',
+      );
     }
-    return data.access_token;
+    try {
+      const { data } = await axios.post(
+        `${this.getBaseUrl(creds)}/v1/oauth2/token`,
+        'grant_type=client_credentials',
+        { auth: { username: clientId, password: clientSecret } },
+      );
+      if (!data?.access_token) {
+        throw new BadRequestException('PayPal OAuth : access_token absent de la réponse');
+      }
+      return data.access_token;
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      const status  = err?.response?.status;
+      const details = err?.response?.data?.error_description ?? err?.message ?? '';
+      throw new BadRequestException(
+        `PayPal OAuth échoué (${status ?? 'réseau'}) : ${details}`,
+      );
+    }
   }
+
+  /**
+   * Devises acceptées par PayPal (liste officielle).
+   * XOF et la plupart des devises africaines NE sont PAS supportées.
+   */
+  private static readonly SUPPORTED_CURRENCIES = new Set([
+    'AUD','BRL','CAD','CNY','CZK','DKK','EUR','GBP','HKD','HUF',
+    'ILS','JPY','MYR','MXN','NOK','NZD','PHP','PLN','SGD','SEK',
+    'CHF','TWD','THB','USD',
+  ]);
 
   async createOrder(
     amount: number,
@@ -52,29 +77,49 @@ export class PaypalService {
     returnUrl?: string,
     cancelUrl?: string,
   ) {
+    // Guard devise — PayPal refusera XOF, XAF, GNF, etc.
+    if (!PaypalService.SUPPORTED_CURRENCIES.has(currency.toUpperCase())) {
+      throw new BadRequestException(
+        `PayPal ne supporte pas la devise ${currency}. ` +
+        `Utilisez USD ou EUR (configurez la devise dans Admin → Paramètres).`,
+      );
+    }
+
     const token   = await this.getAccessToken(creds);
     const baseUrl = this.getBaseUrl(creds);
-    const { data } = await axios.post(
-      `${baseUrl}/v2/checkout/orders`,
-      {
-        intent: 'CAPTURE',
-        purchase_units: [{
-          amount:    { currency_code: currency, value: amount.toFixed(2) },
-          custom_id: orderId,
-        }],
-        // URLs de retour pour le navigateur in-app
-        ...(returnUrl || cancelUrl ? {
-          application_context: {
-            return_url: returnUrl ?? `${this.config.get('API_URL', '')}/payments/paypal-return`,
-            cancel_url: cancelUrl ?? `${this.config.get('API_URL', '')}/payments/paypal-cancel`,
-            user_action: 'PAY_NOW',
-            shipping_preference: 'NO_SHIPPING',
-          },
-        } : {}),
-      },
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    return data;
+    try {
+      const { data } = await axios.post(
+        `${baseUrl}/v2/checkout/orders`,
+        {
+          intent: 'CAPTURE',
+          purchase_units: [{
+            amount:    { currency_code: currency.toUpperCase(), value: amount.toFixed(2) },
+            custom_id: orderId,
+          }],
+          // URLs de retour pour le navigateur in-app
+          ...(returnUrl || cancelUrl ? {
+            application_context: {
+              return_url: returnUrl ?? `${this.config.get('API_URL', '')}/payments/paypal-return`,
+              cancel_url: cancelUrl ?? `${this.config.get('API_URL', '')}/payments/paypal-cancel`,
+              user_action: 'PAY_NOW',
+              shipping_preference: 'NO_SHIPPING',
+            },
+          } : {}),
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      return data;
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      const status  = err?.response?.status;
+      const details =
+        err?.response?.data?.details?.[0]?.description ??
+        err?.response?.data?.message ??
+        err?.message ?? '';
+      throw new BadRequestException(
+        `PayPal createOrder échoué (${status ?? 'réseau'}) : ${details}`,
+      );
+    }
   }
 
   async captureOrder(paypalOrderId: string, creds?: PaypalCreds) {
