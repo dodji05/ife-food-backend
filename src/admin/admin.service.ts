@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { ConfigService } from '@nestjs/config';
+import { Twilio } from 'twilio';
 
 @Injectable()
 export class AdminService {
@@ -10,6 +12,7 @@ export class AdminService {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private uploads: UploadsService,
+    private config: ConfigService,
   ) {}
 
   // ─── DASHBOARD ────────────────────────────
@@ -1369,6 +1372,43 @@ export class AdminService {
       create: { key: 'otpCredentials', value: merged },
     });
     return { success: true };
+  }
+
+  async testOtpCredentials() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'otpCredentials' } });
+    const dbCreds = (cfg?.value as any) ?? {};
+    const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID') || dbCreds.SMS?.accountSid;
+    const authToken  = this.config.get<string>('TWILIO_AUTH_TOKEN')  || dbCreds.SMS?.authToken;
+    const from       = this.config.get<string>('TWILIO_PHONE_NUMBER') || dbCreds.SMS?.phoneNumber;
+
+    const source = this.config.get<string>('TWILIO_ACCOUNT_SID') ? 'env' : 'db';
+
+    if (!accountSid || !authToken) {
+      return { data: { ok: false, source, error: 'Credentials manquants (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN)' } };
+    }
+
+    try {
+      const client = new Twilio(accountSid, authToken);
+      const account = await client.api.accounts(accountSid).fetch();
+      return {
+        data: {
+          ok: true,
+          source,
+          accountName: account.friendlyName,
+          status: account.status,
+          phoneNumber: from ? `${from.slice(0, 4)}****${from.slice(-4)}` : 'non configuré',
+        },
+      };
+    } catch (err: any) {
+      return {
+        data: {
+          ok: false,
+          source,
+          error: err?.message ?? 'Erreur inconnue',
+          code: err?.code,
+        },
+      };
+    }
   }
 
   async getPaymentCredentials() {

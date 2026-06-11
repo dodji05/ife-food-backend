@@ -250,6 +250,11 @@ export class AdminController {
   @AdminLevel('SUPER_ADMIN')
   setOtpCredentials(@Body() body: any) { return this.adminService.setOtpCredentials(body); }
 
+  @Post('config/otp-credentials/test')
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  testOtpCredentials() { return this.adminService.testOtpCredentials(); }
+
   @Get('config/maps-credentials')
   @UseGuards(AdminLevelGuard)
   @AdminLevel('SUPER_ADMIN')
