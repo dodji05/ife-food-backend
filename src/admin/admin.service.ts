@@ -1062,8 +1062,31 @@ export class AdminService {
   }
 
   async getPlatformConfig() {
-    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
-    return { data: { paymentGateways: cfg?.value ?? { STRIPE: true, PAYPAL: true, KKIAPAY: true, FEDAPAY: true, CASH_ON_DELIVERY: true } } };
+    const [gwCfg, settingsCfg] = await Promise.all([
+      this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } }),
+      this.prisma.platformConfig.findUnique({ where: { key: 'platformSettings' } }),
+    ]);
+    const settings = (settingsCfg?.value as any) ?? {};
+    return {
+      data: {
+        paymentGateways: gwCfg?.value ?? { STRIPE: true, PAYPAL: true, KKIAPAY: true, FEDAPAY: true, CASH_ON_DELIVERY: true },
+        otpChannel:      settings.otpChannel     ?? 'SMS',
+        cancelDelay:     settings.cancelDelay     ?? 5,
+        missionDelay:    settings.missionDelay    ?? 30,
+        maintenanceMode: settings.maintenanceMode ?? false,
+      },
+    };
+  }
+
+  async setPlatformConfig(dto: { otpChannel?: string; cancelDelay?: number; missionDelay?: number; maintenanceMode?: boolean }) {
+    const existing = await this.prisma.platformConfig.findUnique({ where: { key: 'platformSettings' } });
+    const merged = { ...((existing?.value as any) ?? {}), ...dto };
+    await this.prisma.platformConfig.upsert({
+      where:  { key: 'platformSettings' },
+      update: { value: merged },
+      create: { key: 'platformSettings', value: merged },
+    });
+    return { success: true };
   }
 
   async getPaymentStats() {

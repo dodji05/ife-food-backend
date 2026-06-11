@@ -17,7 +17,8 @@ export class AuthService {
 
   /** Step 1: Send OTP */
   async sendOtp(phone: string, countryCode: string): Promise<{ sessionId: string }> {
-    const channel = this.config.get('OTP_CHANNEL', 'SMS') as 'SMS' | 'WHATSAPP';
+    const settingsCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'platformSettings' } });
+    const channel = ((settingsCfg?.value as any)?.otpChannel ?? this.config.get('OTP_CHANNEL', 'SMS')) as 'SMS' | 'WHATSAPP';
     const { sessionId } = await this.otpService.createOtpSession(phone, channel);
     return { sessionId };
   }

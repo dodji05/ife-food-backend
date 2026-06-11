@@ -218,6 +218,9 @@ export class AdminController {
   @Get('config/platform')
   getPlatform() { return this.adminService.getPlatformConfig(); }
 
+  @Put('config/platform')
+  setPlatform(@Body() body: any) { return this.adminService.setPlatformConfig(body); }
+
   @Put('config/payment-gateways')
   @UseGuards(AdminLevelGuard)
   @AdminLevel('SUPER_ADMIN')
