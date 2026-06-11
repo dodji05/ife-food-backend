@@ -706,15 +706,18 @@ export class OrdersService {
     if (promo.expiresAt && new Date() > promo.expiresAt) throw new BadRequestException('Promo code expired');
     if (subtotal < promo.minOrder) throw new BadRequestException(`Minimum order ${promo.minOrder} required`);
 
-    // Incrément atomique : échoue si maxUses est atteint, évite la race condition
+    // Incrément atomique : échoue si maxUses est atteint, évite la race condition.
+    // Table réelle : "promo_codes" (@@map dans schema.prisma).
     const updated = await this.prisma.$executeRaw`
-      UPDATE "PromoCode" SET "usesCount" = "usesCount" + 1
+      UPDATE "promo_codes" SET "usesCount" = "usesCount" + 1
       WHERE code = ${code}
         AND ("maxUses" IS NULL OR "usesCount" < "maxUses")
     `;
     if (updated === 0) throw new BadRequestException('Promo code limit reached');
 
-    const discount = promo.type === 'PERCENTAGE' ? subtotal * (promo.value / 100) : promo.value;
+    const discount = promo.type === 'PERCENTAGE'
+      ? Math.round(subtotal * (promo.value / 100))
+      : Number(promo.value);
     return discount;
   }
 
