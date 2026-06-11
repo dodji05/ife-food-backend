@@ -1389,7 +1389,7 @@ export class AdminService {
 
     try {
       const client = new Twilio(accountSid, authToken);
-      const account = await client.api.accounts(accountSid).fetch();
+      const account = await client.api.v2010.account.fetch();
       return {
         data: {
           ok: true,
