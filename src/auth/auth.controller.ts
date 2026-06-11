@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Query, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { SendOtpDto, VerifyOtpDto, SetPinDto, VerifyPinDto, Verify2faDto } from './dto/auth.dto';
@@ -46,6 +46,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Set PIN for authenticated user' })
   setPin(@CurrentUser() user: any, @Body() dto: SetPinDto) {
     return this.authService.setPin(user.id, dto.pin);
+  }
+
+  @Public()
+  @Get('exists')
+  @ApiOperation({ summary: 'Check if a phone number is registered' })
+  checkPhoneExists(@Query('phone') phone: string) {
+    return this.authService.checkPhoneExists(phone);
   }
 
   @Post('2fa/verify')

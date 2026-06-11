@@ -54,6 +54,11 @@ export class AuthService {
     return { user: fullUser, ...tokens, isNewUser: !user.pinHash };
   }
 
+  async checkPhoneExists(phone: string): Promise<{ exists: boolean }> {
+    const user = await this.prisma.user.findUnique({ where: { phone }, select: { id: true } });
+    return { exists: !!user };
+  }
+
   /** Set/Verify PIN */
   async setPin(userId: string, pin: string): Promise<void> {
     const hash = await bcrypt.hash(pin, 12);
