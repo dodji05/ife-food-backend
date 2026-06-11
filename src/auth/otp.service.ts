@@ -79,9 +79,9 @@ export class OtpService {
   private async sendSms(to: string, message: string) {
     try {
       const dbCreds = await this.loadOtpCreds();
-      const accountSid = dbCreds.SMS?.accountSid || this.config.get<string>('TWILIO_ACCOUNT_SID');
-      const authToken  = dbCreds.SMS?.authToken  || this.config.get<string>('TWILIO_AUTH_TOKEN');
-      const from       = dbCreds.SMS?.phoneNumber || this.config.get<string>('TWILIO_PHONE_NUMBER');
+      const accountSid = this.config.get<string>('TWILIO_ACCOUNT_SID') || dbCreds.SMS?.accountSid;
+      const authToken  = this.config.get<string>('TWILIO_AUTH_TOKEN')  || dbCreds.SMS?.authToken;
+      const from       = this.config.get<string>('TWILIO_PHONE_NUMBER') || dbCreds.SMS?.phoneNumber;
       if (!accountSid || !authToken) throw new Error('Twilio not configured');
       const client = new Twilio(accountSid, authToken);
       await client.messages.create({ body: message, from, to });
