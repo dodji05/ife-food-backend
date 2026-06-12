@@ -1,32 +1,21 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { randomInt } from 'crypto';
-import axios from 'axios';
-import { Twilio } from 'twilio';
 
 @Injectable()
 export class OtpService {
-  private readonly logger = new Logger(OtpService.name);
-
   constructor(private prisma: PrismaService, private config: ConfigService) {}
 
-  private async loadOtpCreds(): Promise<any> {
-    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'otpCredentials' } });
-    return (cfg?.value as any) ?? {};
-  }
-
-  /** Generate and send OTP */
+  /** Crée une session OTP — le code est retourné directement dans la réponse (bypass, aucun SMS envoyé) */
   async createOtpSession(phone: string, channel: 'SMS' | 'WHATSAPP'): Promise<{ sessionId: string; code: string }> {
-    // Check for existing pending session (rate limit)
     const recent = await this.prisma.otpSession.findFirst({
       where: { phone, verified: false, createdAt: { gte: new Date(Date.now() - 60000) } },
     });
     if (recent) throw new BadRequestException('Please wait 60 seconds before requesting a new code');
 
-    // Check block
     const blocked = await this.prisma.otpSession.findFirst({
       where: { phone, verified: false, attempts: { gte: 3 }, createdAt: { gte: new Date(Date.now() - 15 * 60000) } },
     });
@@ -47,12 +36,10 @@ export class OtpService {
       },
     });
 
-    // Send OTP via channel
-    await this.sendOtp(phone, code, channel);
     return { sessionId, code };
   }
 
-  /** Verify OTP code */
+  /** Vérifie un code OTP */
   async verifyOtp(phone: string, code: string, sessionId: string) {
     const session = await this.prisma.otpSession.findFirst({
       where: { id: sessionId, phone, verified: false, expiresAt: { gte: new Date() } },
@@ -68,43 +55,5 @@ export class OtpService {
 
     await this.prisma.otpSession.update({ where: { id: sessionId }, data: { verified: true } });
     return session;
-  }
-
-  private async sendOtp(phone: string, code: string, channel: 'SMS' | 'WHATSAPP') {
-    const message = `Your ifè FOOD verification code is: ${code}. Valid for 5 minutes.`;
-    if (channel === 'SMS') await this.sendSms(phone, message);
-    else await this.sendWhatsapp(phone, message);
-  }
-
-  private async sendSms(to: string, message: string) {
-    try {
-      const dbCreds = await this.loadOtpCreds();
-      const accountSid = dbCreds.SMS?.accountSid || this.config.get<string>('TWILIO_ACCOUNT_SID');
-      const authToken  = dbCreds.SMS?.authToken  || this.config.get<string>('TWILIO_AUTH_TOKEN');
-      const from       = dbCreds.SMS?.phoneNumber || this.config.get<string>('TWILIO_PHONE_NUMBER');
-      if (!accountSid || !authToken) throw new Error('Twilio not configured');
-      const client = new Twilio(accountSid, authToken);
-      await client.messages.create({ body: message, from, to });
-    } catch (err) {
-      this.logger.error('SMS send failed', err);
-      throw new BadRequestException('Failed to send OTP via SMS');
-    }
-  }
-
-  private async sendWhatsapp(to: string, message: string) {
-    try {
-      const dbCreds    = await this.loadOtpCreds();
-      const apiUrl     = dbCreds.WHATSAPP?.apiUrl     || this.config.get('WHATSAPP_API_URL');
-      const phoneId    = dbCreds.WHATSAPP?.phoneId    || this.config.get('WHATSAPP_PHONE_ID');
-      const token      = dbCreds.WHATSAPP?.accessToken|| this.config.get('WHATSAPP_ACCESS_TOKEN');
-      await axios.post(
-        `${apiUrl}/${phoneId}/messages`,
-        { messaging_product: 'whatsapp', to, type: 'text', text: { body: message } },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-    } catch (err) {
-      this.logger.error('WhatsApp send failed', err);
-      throw new BadRequestException('Failed to send OTP via WhatsApp');
-    }
   }
 }
