@@ -595,6 +595,21 @@ export class OrdersService {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Order not found');
 
+    if (dto.status === 'IN_PREPARATION' && order.scheduledDeliveryAt) {
+      const scheduledDay = new Date(
+        order.scheduledDeliveryAt.getFullYear(),
+        order.scheduledDeliveryAt.getMonth(),
+        order.scheduledDeliveryAt.getDate(),
+      );
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (scheduledDay > today) {
+        throw new BadRequestException(
+          `Préparation possible à partir du ${order.scheduledDeliveryAt.toLocaleDateString('fr-FR')}`,
+        );
+      }
+    }
+
     const updated = await this.prisma.order.update({
       where: { id: orderId },
       data: {
