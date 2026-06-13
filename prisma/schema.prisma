@@ -325,7 +325,6 @@ model Professional {
 
   user               User                @relation(fields: [userId], references: [id])
   products           Product[]
-  productCategories  ProductCategory[]
   orders             Order[]             @relation("ProfessionalOrders")
   documents          Document[]
   reviews            Review[]
@@ -428,17 +427,13 @@ model Document {
 // ─── PRODUCTS ─────────────────────────────────
 
 model ProductCategory {
-  id             String    @id @default(uuid())
-  // NULL = catégorie globale (plateforme) ; valeur = catégorie spécifique à un pro (legacy)
-  professionalId String?
-  name           Json
-  icon           String?
-  sortOrder      Int       @default(0)
-  createdAt      DateTime  @default(now())
-  products       Product[]
-  professional   Professional? @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  id        String    @id @default(uuid())
+  name      Json
+  icon      String?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  products  Product[]
 
-  @@index([professionalId])
   @@map("product_categories")
 }
 

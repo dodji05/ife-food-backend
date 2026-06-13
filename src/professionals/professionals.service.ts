@@ -101,8 +101,6 @@ export class ProfessionalsService {
     const prof = await this.prisma.professional.findUnique({
       where: { id, status: 'VALIDATED' },
       include: {
-        // Catégories du pro pour le groupement dans le menu
-        productCategories: { orderBy: { sortOrder: 'asc' } },
         reviews: {
           include: { reviewer: { select: { name: true, avatarUrl: true } } },
           take: 10,
@@ -145,26 +143,12 @@ export class ProfessionalsService {
       };
     });
 
-    // Catégories référencées par les produits mais absentes de productCategories
-    // (catégories globales, professionalId = null, créées depuis l'admin).
-    // On les charge séparément et on les fusionne pour que le mobile puisse
-    // afficher les labels corrects dans le sélecteur de catégories.
-    const proSpecificCatIds = new Set(prof.productCategories.map((c: any) => c.id));
-    const globalCatIds = [...new Set(
-      products
-        .map((p) => p.categoryId)
-        .filter((catId): catId is string => !!catId && !proSpecificCatIds.has(catId))
-    )];
-
-    const globalCategories = globalCatIds.length > 0
-      ? await this.prisma.productCategory.findMany({
-          where: { id: { in: globalCatIds } },
-          orderBy: { sortOrder: 'asc' },
-        })
-      : [];
-
-    const allCategories = [...prof.productCategories, ...globalCategories]
-      .sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    // Catégories utilisées par les produits de ce professionnel.
+    // Les catégories sont désormais globales (plus de professionalId).
+    const allCategories = await this.prisma.productCategory.findMany({
+      where: { products: { some: { professionalId: id } } },
+      orderBy: { sortOrder: 'asc' },
+    });
 
     // Note moyenne + nombre total de reviews (requêtes séparées car _count
     // dans findUnique n'est pas typé correctement par Prisma TS generator).

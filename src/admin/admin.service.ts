@@ -589,8 +589,8 @@ export class AdminService {
     return { data: { professional, categories, uncategorizedProducts } };
   }
 
-  async createCatalogueCategory(proId: string, dto: { name: any; icon?: string }) {
-    return this.prisma.productCategory.create({ data: { professionalId: proId, name: dto.name, icon: dto.icon } });
+  async createCatalogueCategory(_proId: string, dto: { name: any; icon?: string }) {
+    return this.prisma.productCategory.create({ data: { name: dto.name, icon: dto.icon } });
   }
 
   // ── Catégories globales (indépendantes d'un professionnel) ──────────────────
@@ -610,7 +610,7 @@ export class AdminService {
 
   async createGlobalCategory(dto: { name: any; icon?: string }) {
     const category = await this.prisma.productCategory.create({
-      data: { professionalId: null, name: dto.name, icon: dto.icon ?? null },
+      data: { name: dto.name, icon: dto.icon ?? null },
     });
     return { data: category };
   }

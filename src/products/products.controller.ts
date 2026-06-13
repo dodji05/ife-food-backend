@@ -16,22 +16,22 @@ export class ProductsController {
 
   @Post('categories')
   @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
-  createCategory(@CurrentUser() user: any, @Body() dto: CreateCategoryDto) {
-    return this.productsService.createCategory(user.id, dto);
-  }
-
-  @Get('categories/mine')
-  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Get my categories (professional shortcut)' })
-  getMineCategories(@CurrentUser() user: any) {
-    return this.productsService.getCategoriesMine(user.id);
+  createCategory(@Body() dto: CreateCategoryDto) {
+    return this.productsService.createCategory(dto);
   }
 
   @Get('categories/all')
   @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Get all available categories for product creation (global + pro own)' })
-  getAllCategoriesForPro(@CurrentUser() user: any) {
-    return this.productsService.getCategoriesForPro(user.id);
+  @ApiOperation({ summary: 'Get all global categories (for product creation picker)' })
+  getAllCategories() {
+    return this.productsService.getAllCategories();
+  }
+
+  @Get('categories/mine')
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Get categories that have products for this professional' })
+  getMineCategories(@CurrentUser() user: any) {
+    return this.productsService.getCategoriesMine(user.id);
   }
 
   @Get('categories/:professionalId')
@@ -45,21 +45,21 @@ export class ProductsController {
   @Patch('categories/reorder')
   @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
   @ApiOperation({ summary: 'Bulk reorder categories' })
-  reorderCategories(@CurrentUser() user: any, @Body() dto: ReorderCategoriesDto) {
-    return this.productsService.reorderCategories(user.id, dto);
+  reorderCategories(@Body() dto: ReorderCategoriesDto) {
+    return this.productsService.reorderCategories(dto);
   }
 
   @Patch('categories/:id')
   @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
-  updateCategory(@Param('id') id: string, @CurrentUser() user: any, @Body() dto: UpdateCategoryDto) {
-    return this.productsService.updateCategory(user.id, id, dto);
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.productsService.updateCategory(id, dto);
   }
 
   @Delete('categories/:id')
   @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
   @ApiOperation({ summary: 'Delete category (products are decategorized, not deleted)' })
-  deleteCategory(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.productsService.deleteCategory(user.id, id);
+  deleteCategory(@Param('id') id: string) {
+    return this.productsService.deleteCategory(id);
   }
 
   @Post()
