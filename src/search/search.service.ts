@@ -44,7 +44,7 @@ export class SearchService {
       establishments = await this.prisma.$queryRawUnsafe<any[]>(
         `
         SELECT id, "businessName", category::text AS category,
-               "logoUrl", "coverImageUrl", city, "isOpen", country
+               "logoUrl", "coverImageUrl", city, "isOpen", "openingHours", country
         FROM "professionals"
         WHERE status = 'VALIDATED'
           ${country ? 'AND country = $3' : ''}
