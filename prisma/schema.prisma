@@ -519,14 +519,14 @@ model Order {
 model OrderItem {
   id         String   @id @default(uuid())
   orderId    String
-  productId  String
+  productId  String?
   quantity   Int
   unitPrice  Float
   totalPrice Float
   options    Json?
   createdAt  DateTime @default(now())
   order      Order    @relation(fields: [orderId], references: [id])
-  product    Product  @relation(fields: [productId], references: [id])
+  product    Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([productId])
