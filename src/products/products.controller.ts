@@ -27,6 +27,13 @@ export class ProductsController {
     return this.productsService.getCategoriesMine(user.id);
   }
 
+  @Get('categories/all')
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Get all available categories for product creation (global + pro own)' })
+  getAllCategoriesForPro(@CurrentUser() user: any) {
+    return this.productsService.getCategoriesForPro(user.id);
+  }
+
   @Get('categories/:professionalId')
   @Public()
   getCategories(@Param('professionalId') professionalId: string) {

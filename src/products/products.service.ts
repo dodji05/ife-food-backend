@@ -169,6 +169,27 @@ export class ProductsService {
     return this.getCategories(prof.id);
   }
 
+  /**
+   * Catégories disponibles lors de la création d'un produit :
+   *  • catégories globales (professionalId IS NULL) créées par l'admin
+   *  • catégories propres au pro (professionalId = prof.id) si existantes
+   * Triées par sortOrder puis par nom FR.
+   */
+  async getCategoriesForPro(userId: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException('Professional profile not found');
+    return this.prisma.productCategory.findMany({
+      where: {
+        OR: [
+          { professionalId: null },
+          { professionalId: prof.id },
+        ],
+      },
+      select: { id: true, name: true, icon: true, sortOrder: true },
+      orderBy: [{ sortOrder: 'asc' }],
+    });
+  }
+
   async getProductsMine(userId: string, pagination: PaginationDto) {
     const prof = await this.prisma.professional.findUnique({ where: { userId } });
     if (!prof) throw new NotFoundException('Professional profile not found');
