@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateProfessionalDto, UpdateProfessionalDto, UpdateOpeningHoursDto } from './dto/professional.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { computeIsOpen } from '../common/utils/opening-hours.util';
 
 @Injectable()
 export class ProfessionalsService {
@@ -47,62 +48,7 @@ export class ProfessionalsService {
       },
       include: { documents: true },
     });
-    // Override isOpen avec l'auto-calcul si des horaires sont configurés.
-    // Source de vérité = openingHours + heure courante (Bénin/Cotonou UTC+1).
-    return { data: { ...prof, isOpen: this._computeIsOpen(prof.isOpen, prof.openingHours) } };
-  }
-
-  /// Détermine si l'établissement est ouvert à l'instant T.
-  /// - Si openingHours non configuré -> on respecte le toggle manuel `dbIsOpen`
-  /// - Sinon : ouvert UNIQUEMENT si on est dans la plage du jour courant
-  ///
-  /// Heure de référence : Africa/Porto-Novo (UTC+1, pas de DST au Bénin).
-  /// Format des slots : `{mon: {open: '08:00', close: '22:00'}, ...}`.
-  /// Une valeur null/absente sur un jour = fermé ce jour.
-  /// Slot qui passe minuit (ex: open=22:00, close=02:00) = supporté.
-  private _computeIsOpen(dbIsOpen: boolean, openingHours: any): boolean {
-    if (!openingHours || typeof openingHours !== 'object' || Object.keys(openingHours).length === 0) {
-      return dbIsOpen;
-    }
-    // Heure courante au fuseau Bénin (UTC+1).
-    const now = new Date();
-    const benin = new Date(now.getTime() + 1 * 60 * 60 * 1000); // +1h offset UTC
-    const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    const todayKey = dayKeys[benin.getUTCDay()];
-    const yesterdayKey = dayKeys[(benin.getUTCDay() + 6) % 7];
-
-    const nowMinutes = benin.getUTCHours() * 60 + benin.getUTCMinutes();
-
-    const parseSlot = (slot: any): [number, number] | null => {
-      if (!slot || typeof slot !== 'object') return null;
-      const open  = typeof slot.open  === 'string' ? slot.open  : null;
-      const close = typeof slot.close === 'string' ? slot.close : null;
-      if (!open || !close) return null;
-      const [oh, om] = open.split(':').map(Number);
-      const [ch, cm] = close.split(':').map(Number);
-      if ([oh, om, ch, cm].some((n) => Number.isNaN(n))) return null;
-      return [oh * 60 + om, ch * 60 + cm];
-    };
-
-    // Cas 1 : slot du jour courant
-    const today = parseSlot(openingHours[todayKey]);
-    if (today) {
-      const [open, close] = today;
-      if (close > open) {
-        // Slot classique 08:00-22:00
-        if (nowMinutes >= open && nowMinutes < close) return true;
-      } else if (close < open) {
-        // Slot qui passe minuit (ex: 22:00-02:00) -> ouvert si >= open
-        if (nowMinutes >= open) return true;
-      }
-    }
-    // Cas 2 : slot d'hier qui passe minuit et qu'on est encore dedans
-    const yesterday = parseSlot(openingHours[yesterdayKey]);
-    if (yesterday) {
-      const [open, close] = yesterday;
-      if (close < open && nowMinutes < close) return true;
-    }
-    return false;
+    return { data: { ...prof, isOpen: computeIsOpen(prof.isOpen, prof.openingHours) } };
   }
 
   async updateProfile(userId: string, dto: UpdateProfessionalDto) {
@@ -248,10 +194,7 @@ export class ProfessionalsService {
         deliveryTimeMin: deliveryDefaults.defaultTimeMin ?? 25,
         // deliveryFee volontairement absent : la valeur réelle est calculée dynamiquement
         // par geo.service.calculateDeliveryFee() selon le mode actif (zone/km/city).
-        // BUG FIX : recalculer isOpen avec les horaires configurés, exactement
-        // comme getMyProfile le fait. Sans ça, le client voyait le isOpen brut
-        // de la DB (souvent false) même si les openingHours indiquaient ouvert.
-        isOpen: this._computeIsOpen(prof.isOpen, prof.openingHours),
+        isOpen: computeIsOpen(prof.isOpen, prof.openingHours),
       },
     };
   }

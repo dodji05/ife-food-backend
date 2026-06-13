@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { computeIsOpen } from '../common/utils/opening-hours.util';
 
 /**
  * Recherche unifiée pour le client mobile.
@@ -185,6 +186,7 @@ export class SearchService {
         select: {
           id: true, businessName: true, category: true,
           logoUrl: true, coverImageUrl: true, city: true, isOpen: true,
+          openingHours: true,
           createdAt: true,
         },
         take: 30, // on overfetch puis on trie + slice
@@ -199,6 +201,7 @@ export class SearchService {
         .slice(0, 6)
         .map(({ _rating, ...p }) => ({
           ...p,
+          isOpen:      computeIsOpen(p.isOpen, p.openingHours),
           avgRating:   _rating.avg,
           reviewCount: _rating.count,
         }));

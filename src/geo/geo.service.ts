@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
+import { computeIsOpen } from '../common/utils/opening-hours.util';
 
 @Injectable()
 export class GeoService {
@@ -222,7 +223,12 @@ export class GeoService {
       const avgRating = p.reviews.length
         ? p.reviews.reduce((s, r) => s + (r.professionalRating ?? 0), 0) / p.reviews.length
         : 0;
-      return { ...p, distance: Math.round(distance * 10) / 10, avgRating: Math.round(avgRating * 10) / 10 };
+      return {
+        ...p,
+        distance:  Math.round(distance  * 10) / 10,
+        avgRating: Math.round(avgRating * 10) / 10,
+        isOpen:    computeIsOpen(p.isOpen, p.openingHours),
+      };
     });
 
     if (testMode) {

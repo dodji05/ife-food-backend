@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import axios from 'axios';
+import { computeIsOpen } from '../common/utils/opening-hours.util';
 
 @Injectable()
 export class TasksService {
@@ -97,32 +98,25 @@ export class TasksService {
     if (count > 0) this.logger.log(`🗑️  Deleted ${count} expired OTP sessions`);
   }
 
-  /** Auto-close professionals past closing hours daily */
+  /** Sync DB isOpen flag with current opening hours (runs every hour) */
   @Cron(CronExpression.EVERY_HOUR)
   async autoManageProfessionalStatus() {
-    const now = new Date();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-    const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-    const day = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
-
     const professionals = await this.prisma.professional.findMany({
       where: { status: 'VALIDATED', openingHours: { not: null } },
     });
 
+    let updated = 0;
     for (const prof of professionals) {
-      const hours = prof.openingHours as any;
-      if (!hours?.[day]) continue;
-      const { open, close } = hours[day];
-      const shouldBeOpen = open <= timeStr && timeStr <= close;
-
+      const shouldBeOpen = computeIsOpen(prof.isOpen, prof.openingHours);
       if (prof.isOpen !== shouldBeOpen) {
         await this.prisma.professional.update({
           where: { id: prof.id },
           data: { isOpen: shouldBeOpen },
         });
+        updated++;
       }
     }
+    if (updated > 0) this.logger.log(`🕒  isOpen updated for ${updated} professional(s)`);
   }
 
   /** Mark stuck orders as cancelled after 2 hours */
