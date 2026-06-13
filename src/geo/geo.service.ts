@@ -92,7 +92,7 @@ export class GeoService {
     const sToLat   = safe(toLat,   6.36);
     const sToLng   = safe(toLng,   2.42);
 
-    const distance = this.calculateDistance(sFromLat, sFromLng, sToLat, sToLng);
+    const distance = await this.getRoutingDistance(sFromLat, sFromLng, sToLat, sToLng);
     const weatherMultiplier = await this.getWeatherMultiplier(sToLat, sToLng);
 
     // ── city mode : tarif fixe par paire de villes ──────────────────────────
