@@ -78,14 +78,12 @@ async function main() {
   // Catégories de produits — Restaurant 1
   const cat1Plats = await prisma.productCategory.create({
     data: {
-      professionalId: restaurant1.id,
       name: { fr: 'Plats principaux', en: 'Main dishes' },
       sortOrder: 0,
     },
   });
   const cat1Boissons = await prisma.productCategory.create({
     data: {
-      professionalId: restaurant1.id,
       name: { fr: 'Boissons', en: 'Drinks' },
       sortOrder: 1,
     },
@@ -173,21 +171,18 @@ async function main() {
 
   const cat2Burgers = await prisma.productCategory.create({
     data: {
-      professionalId: restaurant2.id,
       name: { fr: 'Burgers', en: 'Burgers' },
       sortOrder: 0,
     },
   });
   const cat2Pizzas = await prisma.productCategory.create({
     data: {
-      professionalId: restaurant2.id,
       name: { fr: 'Pizzas', en: 'Pizzas' },
       sortOrder: 1,
     },
   });
   const cat2Boissons2 = await prisma.productCategory.create({
     data: {
-      professionalId: restaurant2.id,
       name: { fr: 'Boissons', en: 'Drinks' },
       sortOrder: 2,
     },
@@ -273,14 +268,12 @@ async function main() {
 
   const cat3Fruits = await prisma.productCategory.create({
     data: {
-      professionalId: epicerie.id,
       name: { fr: 'Fruits & Légumes', en: 'Fruits & Vegetables' },
       sortOrder: 0,
     },
   });
   const cat3Hygiene = await prisma.productCategory.create({
     data: {
-      professionalId: epicerie.id,
       name: { fr: 'Hygiène', en: 'Hygiene' },
       sortOrder: 1,
     },
