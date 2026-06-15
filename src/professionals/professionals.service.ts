@@ -117,7 +117,7 @@ export class ProfessionalsService {
     // findUnique ci-dessus qui peut rater les produits sous catégories globales
     // si la relation Prisma est désynchronisée.
     const products = await this.prisma.product.findMany({
-      where: { professionalId: id },
+      where: { professionalId: id, isDeleted: false },
       include: { category: true },
       orderBy: [{ categoryId: 'asc' }, { createdAt: 'asc' }],
     });

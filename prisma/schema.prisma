@@ -448,6 +448,7 @@ model Product {
   imageUrl       String?
   isAvailable    Boolean          @default(true)
   isMenu         Boolean          @default(false)
+  isDeleted      Boolean          @default(false)
   stock          Int?
   variants       Json?
   options        Json?

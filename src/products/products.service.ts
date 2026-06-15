@@ -93,17 +93,27 @@ export class ProductsService {
   }
 
   async deleteProduct(userId: string, productId: string) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId }, include: { professional: true } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: { professional: true, _count: { select: { orderItems: true } } },
+    });
     if (!product) throw new NotFoundException();
     if (product.professional.userId !== userId) throw new ForbiddenException();
-    // Dissociation explicite dans une transaction avant suppression.
-    // Évite toute erreur FK même si la contrainte ON DELETE SET NULL
-    // n'est pas correctement appliquée en base.
-    await this.prisma.$transaction([
-      this.prisma.orderItem.updateMany({ where: { productId }, data: { productId: null } }),
-      this.prisma.promoCode.updateMany({ where: { productId }, data: { productId: null } }),
-      this.prisma.product.delete({ where: { id: productId } }),
-    ]);
+
+    if (product._count.orderItems > 0) {
+      // Suppression logique : produit déjà commandé → conservé en BD
+      // mais masqué partout (client + pro). L'historique des commandes reste intact.
+      await this.prisma.product.update({
+        where: { id: productId },
+        data: { isDeleted: true, isAvailable: false },
+      });
+    } else {
+      // Suppression physique : jamais commandé, aucune trace nécessaire.
+      await this.prisma.$transaction([
+        this.prisma.promoCode.updateMany({ where: { productId }, data: { productId: null } }),
+        this.prisma.product.delete({ where: { id: productId } }),
+      ]);
+    }
   }
 
   async toggleAvailability(userId: string, productId: string) {
@@ -163,7 +173,7 @@ export class ProductsService {
 
   async getProducts(professionalId: string, pagination: PaginationDto | GetProductsQueryDto) {
     const isAvailable = (pagination as GetProductsQueryDto).isAvailable;
-    const where: any = { professionalId };
+    const where: any = { professionalId, isDeleted: false };
     if (isAvailable !== undefined) where.isAvailable = isAvailable;
     const [products, total] = await Promise.all([
       this.prisma.product.findMany({ where, include: { category: true }, skip: pagination.skip, take: pagination.limit }),
@@ -176,6 +186,7 @@ export class ProductsService {
     const products = await this.prisma.product.findMany({
       where: {
         isAvailable: true,
+        isDeleted: false,
         professional: { status: 'VALIDATED', isOpen: true },
         OR: [
           { name: { path: ['fr'], string_contains: query } },
