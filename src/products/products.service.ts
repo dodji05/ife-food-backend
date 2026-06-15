@@ -96,7 +96,14 @@ export class ProductsService {
     const product = await this.prisma.product.findUnique({ where: { id: productId }, include: { professional: true } });
     if (!product) throw new NotFoundException();
     if (product.professional.userId !== userId) throw new ForbiddenException();
-    return this.prisma.product.delete({ where: { id: productId } });
+    // Dissociation explicite dans une transaction avant suppression.
+    // Évite toute erreur FK même si la contrainte ON DELETE SET NULL
+    // n'est pas correctement appliquée en base.
+    await this.prisma.$transaction([
+      this.prisma.orderItem.updateMany({ where: { productId }, data: { productId: null } }),
+      this.prisma.promoCode.updateMany({ where: { productId }, data: { productId: null } }),
+      this.prisma.product.delete({ where: { id: productId } }),
+    ]);
   }
 
   async toggleAvailability(userId: string, productId: string) {
