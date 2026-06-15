@@ -19,7 +19,11 @@ export class GeoService {
     originLat: number, originLng: number,
     destLat: number,   destLng: number,
   ): Promise<number> {
-    const apiKey = this.config.get<string>('GOOGLE_MAPS_API_KEY');
+    const mapsCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'mapsCredentials' } });
+    const mapsRaw = (mapsCfg?.value as any) ?? {};
+    const apiKey =
+      mapsRaw?.GOOGLE_MAPS?.apiKey ||
+      this.config.get<string>('GOOGLE_MAPS_API_KEY');
     if (!apiKey) {
       this.logger.warn('GOOGLE_MAPS_API_KEY absent — fallback Haversine pour la distance');
       return this.calculateDistance(originLat, originLng, destLat, destLng);
