@@ -66,7 +66,7 @@ async function bootstrap() {
   if (nodeEnv !== 'production') {
     const config = new DocumentBuilder()
       .setTitle('ifè FOOD API')
-      .setDescription('REST API for ifè FOOD platform — Ets SWK FAKEYE, Bénin')
+      .setDescription('REST API for ifè FOOD platform — By FAKÊYÊ HORTENSE BANKOLÉ, Bénin')
       .setVersion('1.0')
       .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'JWT')
       .addTag('auth', 'Authentication & OTP')
