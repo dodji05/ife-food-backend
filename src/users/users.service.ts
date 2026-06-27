@@ -43,7 +43,34 @@ export class UsersService {
   }
 
   async deleteAccount(userId: string) {
-    return this.prisma.user.update({ where: { id: userId }, data: { deletedAt: new Date(), status: 'BANNED', phone: `deleted_${Date.now()}` } });
+    await this.prisma.$transaction([
+      // Données non essentielles → suppression immédiate
+      this.prisma.userAddress.deleteMany({ where: { userId } }),
+      this.prisma.notification.deleteMany({ where: { userId } }),
+      this.prisma.otpSession.deleteMany({ where: { userId } }),
+      this.prisma.loginLog.deleteMany({ where: { userId } }),
+      this.prisma.legalAcceptance.deleteMany({ where: { userId } }),
+      // Reviews : supprimer le commentaire, conserver la note (utile pour les pros)
+      this.prisma.review.updateMany({ where: { userId }, data: { comment: null } }),
+      // Profil : anonymisation complète de tous les champs PII
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          phone:            `deleted_${Date.now()}`,
+          name:             null,
+          firstName:        null,
+          email:            null,
+          avatarUrl:        null,
+          fcmToken:         null,
+          pinHash:          null,
+          biometricEnabled: false,
+          twoFaEnabled:     false,
+          twoFaSecret:      null,
+          deletedAt:        new Date(),
+          status:           'BANNED',
+        },
+      }),
+    ]);
   }
 
   async acceptLegal(userId: string, documentType: string, version: string, ip: string) {

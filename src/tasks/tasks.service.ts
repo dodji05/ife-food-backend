@@ -133,6 +133,23 @@ export class TasksService {
     if (count > 0) this.logger.log(`⚠️  Auto-cancelled ${count} timed-out orders`);
   }
 
+  /** Purge définitive des comptes supprimés depuis plus de 30 jours (RGPD + Google Play) */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async purgeDeletedAccounts() {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const users = await this.prisma.user.findMany({
+      where: { deletedAt: { lt: thirtyDaysAgo }, status: 'BANNED' },
+      select: { id: true },
+    });
+    if (users.length === 0) return;
+    const ids = users.map((u) => u.id);
+    // Supprimer les messages (non critiques, contrainte FK possible)
+    await this.prisma.message.deleteMany({ where: { senderId: { in: ids } } }).catch(() => null);
+    // Supprimer les reviews restantes
+    await this.prisma.review.deleteMany({ where: { userId: { in: ids } } }).catch(() => null);
+    this.logger.log(`🗑️  Purged data for ${ids.length} deleted account(s)`);
+  }
+
   /** Clean old login logs (keep 90 days) */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async cleanOldLoginLogs() {
