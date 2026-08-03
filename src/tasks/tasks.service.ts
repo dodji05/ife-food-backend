@@ -146,7 +146,7 @@ export class TasksService {
     // Supprimer les messages (non critiques, contrainte FK possible)
     await this.prisma.message.deleteMany({ where: { senderId: { in: ids } } }).catch(() => null);
     // Supprimer les reviews restantes
-    await this.prisma.review.deleteMany({ where: { userId: { in: ids } } }).catch(() => null);
+    await this.prisma.review.deleteMany({ where: { reviewerId: { in: ids } } }).catch(() => null);
     this.logger.log(`🗑️  Purged data for ${ids.length} deleted account(s)`);
   }
 

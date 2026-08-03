@@ -50,8 +50,8 @@ export class UsersService {
       this.prisma.otpSession.deleteMany({ where: { userId } }),
       this.prisma.loginLog.deleteMany({ where: { userId } }),
       this.prisma.legalAcceptance.deleteMany({ where: { userId } }),
-      // Reviews : supprimer le commentaire, conserver la note (utile pour les pros)
-      this.prisma.review.updateMany({ where: { userId }, data: { comment: null } }),
+      // Reviews : supprimer les commentaires, conserver les notes (utiles pour les pros/livreurs)
+      this.prisma.review.updateMany({ where: { reviewerId: userId }, data: { professionalComment: null, driverComment: null } }),
       // Profil : anonymisation complète de tous les champs PII
       this.prisma.user.update({
         where: { id: userId },
