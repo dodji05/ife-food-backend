@@ -408,12 +408,39 @@ export class AdminService {
   }
 
   // ─── PROFESSIONALS VALIDATION ─────────────
+  // Inclut aussi les users PROFESSIONAL sans fiche établissement (jamais
+  // ouvert leur tableau de bord côté app) : sans ça, l'admin ne pouvait pas
+  // valider leur inscription tant qu'ils n'avaient rien renseigné.
   async getPendingProfessionals() {
-    return this.prisma.professional.findMany({
-      where: { status: 'PENDING' },
-      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } }, documents: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    const [withFiche, orphanUsers] = await Promise.all([
+      this.prisma.professional.findMany({
+        where: { status: 'PENDING' },
+        include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } }, documents: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.user.findMany({
+        where: { role: 'PROFESSIONAL', status: 'PENDING', professional: null },
+        select: { id: true, name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true, createdAt: true, countryCode: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+
+    const orphanRows = orphanUsers.map((u) => ({
+      id: u.id,
+      businessName: null,
+      category: null,
+      city: null,
+      country: u.countryCode,
+      status: 'PENDING',
+      createdAt: u.createdAt,
+      hasFiche: false,
+      user: { name: u.name, firstName: u.firstName, phone: u.phone, email: u.email, createdByAdmin: u.createdByAdmin, lastLoginAt: u.lastLoginAt },
+      documents: [],
+    }));
+
+    return [...withFiche, ...orphanRows].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
   }
 
   // ─── DRIVERS PENDING ──────────────────────
@@ -429,7 +456,39 @@ export class AdminService {
 
   async validateProfessional(id: string, status: 'VALIDATED' | 'REJECTED', note?: string) {
     const prof = await this.prisma.professional.findUnique({ where: { id }, include: { user: true } });
-    if (!prof) throw new NotFoundException();
+
+    // Pas de fiche : 'id' est alors le userId d'un pro qui n'a jamais ouvert
+    // son tableau de bord. On crée la fiche directement avec le statut choisi
+    // par l'admin, pour que sa décision ne soit pas écrasée plus tard par le
+    // placeholder auto-créé au premier login (cf. ProfessionalsService.getMyProfile).
+    if (!prof) {
+      const user = await this.prisma.user.findUnique({ where: { id } });
+      if (!user || user.role !== 'PROFESSIONAL') throw new NotFoundException();
+
+      await this.prisma.professional.create({
+        data: {
+          userId: user.id,
+          businessName: 'Mon établissement',
+          category: 'RESTAURANT',
+          address: '',
+          city: '',
+          country: user.countryCode ?? 'BJ',
+          lat: 0,
+          lng: 0,
+          status,
+          adminNote: note,
+          validatedAt: status === 'VALIDATED' ? new Date() : null,
+          deliveryRadiusKm: 10,
+        },
+      });
+      await this.prisma.user.update({ where: { id: user.id }, data: { status: status === 'VALIDATED' ? 'ACTIVE' : 'SUSPENDED' } });
+
+      await this.notifications.sendPush(user.id,
+        status === 'VALIDATED' ? '🎉 Compte validé !' : 'Compte non validé',
+        status === 'VALIDATED' ? 'Votre établissement est maintenant actif sur ifè FOOD.' : `Votre inscription a été refusée${note ? `: ${note}` : '.'}`
+      );
+      return { success: true };
+    }
 
     await this.prisma.professional.update({ where: { id }, data: { status, adminNote: note, validatedAt: status === 'VALIDATED' ? new Date() : null } });
     await this.prisma.user.update({ where: { id: prof.userId }, data: { status: status === 'VALIDATED' ? 'ACTIVE' : 'SUSPENDED' } });
@@ -708,8 +767,31 @@ export class AdminService {
         documents: true,
       },
     });
-    if (!pro) throw new NotFoundException();
-    return { data: pro };
+    if (pro) return { data: pro };
+
+    // Pas de fiche : 'id' est le userId d'un pro en attente sans établissement
+    // renseigné. On retourne un objet minimal pour afficher le bandeau de
+    // validation sans crasher le modal de détail.
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, firstName: true, phone: true, email: true, status: true, role: true, countryCode: true, createdAt: true, createdByAdmin: true, lastLoginAt: true },
+    });
+    if (!user || user.role !== 'PROFESSIONAL') throw new NotFoundException();
+
+    return {
+      data: {
+        id: user.id,
+        businessName: null,
+        category: null,
+        city: null,
+        country: user.countryCode,
+        status: 'PENDING',
+        createdAt: user.createdAt,
+        hasFiche: false,
+        user,
+        documents: [],
+      },
+    };
   }
 
   async getProfessionalOrders(id: string) {
