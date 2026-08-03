@@ -458,29 +458,13 @@ export class AdminService {
     const prof = await this.prisma.professional.findUnique({ where: { id }, include: { user: true } });
 
     // Pas de fiche : 'id' est alors le userId d'un pro qui n'a jamais ouvert
-    // son tableau de bord. On crée la fiche directement avec le statut choisi
-    // par l'admin, pour que sa décision ne soit pas écrasée plus tard par le
-    // placeholder auto-créé au premier login (cf. ProfessionalsService.getMyProfile).
+    // son tableau de bord (donc jamais créé sa fiche professional). On valide
+    // uniquement le User — la fiche sera créée par le upsert existant
+    // (ProfessionalsService.getMyProfile) dès qu'il ouvrira son dashboard.
     if (!prof) {
       const user = await this.prisma.user.findUnique({ where: { id } });
       if (!user || user.role !== 'PROFESSIONAL') throw new NotFoundException();
 
-      await this.prisma.professional.create({
-        data: {
-          userId: user.id,
-          businessName: 'Mon établissement',
-          category: 'RESTAURANT',
-          address: '',
-          city: '',
-          country: user.countryCode ?? 'BJ',
-          lat: 0,
-          lng: 0,
-          status,
-          adminNote: note,
-          validatedAt: status === 'VALIDATED' ? new Date() : null,
-          deliveryRadiusKm: 10,
-        },
-      });
       await this.prisma.user.update({ where: { id: user.id }, data: { status: status === 'VALIDATED' ? 'ACTIVE' : 'SUSPENDED' } });
 
       await this.notifications.sendPush(user.id,
