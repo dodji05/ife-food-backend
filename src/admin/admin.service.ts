@@ -446,12 +446,38 @@ export class AdminService {
   // ─── DRIVERS PENDING ──────────────────────
   /// Symétrique de getPendingProfessionals — utilisé par l'écran admin
   /// mobile (onglet 'Livreurs' dans /admin/pending).
+  // Inclut aussi les users DRIVER sans fiche (jamais ouvert leur dashboard) —
+  // même logique que getPendingProfessionals.
   async getPendingDrivers() {
-    return this.prisma.driver.findMany({
-      where: { status: 'PENDING' },
-      include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } }, documents: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    const [withFiche, orphanUsers] = await Promise.all([
+      this.prisma.driver.findMany({
+        where: { status: 'PENDING' },
+        include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } }, documents: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.user.findMany({
+        where: { role: 'DRIVER', status: 'PENDING', driver: null },
+        select: { id: true, name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true, createdAt: true, countryCode: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+
+    const orphanRows = orphanUsers.map((u) => ({
+      id: u.id,
+      vehicleType: null,
+      licensePlate: null,
+      zoneCity: null,
+      zoneCountry: u.countryCode,
+      status: 'PENDING',
+      createdAt: u.createdAt,
+      hasFiche: false,
+      user: { name: u.name, firstName: u.firstName, phone: u.phone, email: u.email, createdByAdmin: u.createdByAdmin, lastLoginAt: u.lastLoginAt },
+      documents: [],
+    }));
+
+    return [...withFiche, ...orphanRows].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
   }
 
   async validateProfessional(id: string, status: 'VALIDATED' | 'REJECTED', note?: string) {
@@ -486,7 +512,22 @@ export class AdminService {
 
   async validateDriver(id: string, status: 'VALIDATED' | 'REJECTED', note?: string) {
     const driver = await this.prisma.driver.findUnique({ where: { id }, include: { user: true } });
-    if (!driver) throw new NotFoundException();
+
+    // Pas de fiche : 'id' est alors le userId d'un livreur qui n'a jamais
+    // ouvert son dashboard. On valide uniquement le User — la fiche driver
+    // sera créée plus tard (étape onboarding véhicule côté app).
+    if (!driver) {
+      const user = await this.prisma.user.findUnique({ where: { id } });
+      if (!user || user.role !== 'DRIVER') throw new NotFoundException();
+
+      await this.prisma.user.update({ where: { id: user.id }, data: { status: status === 'VALIDATED' ? 'ACTIVE' : 'SUSPENDED' } });
+
+      await this.notifications.sendPush(user.id,
+        status === 'VALIDATED' ? '🚀 Compte livreur validé !' : 'Compte non validé',
+        status === 'VALIDATED' ? 'Vous pouvez maintenant recevoir des missions de livraison.' : `Votre inscription a été refusée${note ? `: ${note}` : '.'}`
+      );
+      return { success: true };
+    }
 
     await this.prisma.driver.update({ where: { id }, data: { status: status as any, adminNote: note, validatedAt: status === 'VALIDATED' ? new Date() : null } });
     await this.prisma.user.update({ where: { id: driver.userId }, data: { status: status === 'VALIDATED' ? 'ACTIVE' : 'SUSPENDED' } });
@@ -716,14 +757,39 @@ export class AdminService {
         _count: { id: true },
       }),
     ]);
-    if (!driver) throw new NotFoundException();
+    if (driver) {
+      return {
+        data: {
+          ...driver,
+          tipStats: {
+            totalTips: tipStats._sum.amount ?? 0,
+            tipCount: tipStats._count.id ?? 0,
+          },
+        },
+      };
+    }
+
+    // Pas de fiche : 'id' est le userId d'un livreur en attente sans fiche.
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, firstName: true, phone: true, email: true, status: true, role: true, countryCode: true, createdAt: true, createdByAdmin: true, lastLoginAt: true },
+    });
+    if (!user || user.role !== 'DRIVER') throw new NotFoundException();
+
     return {
       data: {
-        ...driver,
-        tipStats: {
-          totalTips: tipStats._sum.amount ?? 0,
-          tipCount: tipStats._count.id ?? 0,
-        },
+        id: user.id,
+        vehicleType: null,
+        licensePlate: null,
+        zoneCity: null,
+        zoneCountry: user.countryCode,
+        status: 'PENDING',
+        createdAt: user.createdAt,
+        hasFiche: false,
+        user,
+        documents: [],
+        selectedZones: [],
+        tipStats: { totalTips: 0, tipCount: 0 },
       },
     };
   }
