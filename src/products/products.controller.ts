@@ -93,8 +93,8 @@ export class ProductsController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload product image (multipart field name: image)' })
   // Le mobile envoie le fichier sous le champ `image` (FormData).
-  // memoryStorage : le buffer est passé directement à Cloudinary, pas de
-  // fichier temporaire sur disque (cohérent avec /uploads/avatar).
+  // memoryStorage : le buffer est passé directement à sharp (resize +
+  // conversion WebP) avant écriture disque par UploadsService.uploadFile.
   @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
   uploadImage(
     @Param('id') id: string,

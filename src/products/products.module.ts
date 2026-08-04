@@ -5,7 +5,7 @@ import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
   // UploadsModule exporte UploadsService — utilisé par uploadImage()
-  // pour pousser vers Cloudinary (mime/size validation déjà en place).
+  // pour stocker le fichier sur disque (mime/size validation déjà en place).
   imports: [UploadsModule],
   controllers: [ProductsController],
   providers: [ProductsService],

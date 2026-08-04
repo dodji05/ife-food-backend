@@ -114,6 +114,7 @@ export class ProductsService {
         this.prisma.product.delete({ where: { id: productId } }),
       ]);
     }
+    return { deleted: true };
   }
 
   async toggleAvailability(userId: string, productId: string) {
@@ -124,10 +125,11 @@ export class ProductsService {
   }
 
   /**
-   * Upload une image produit (multipart) vers Cloudinary et persiste l'URL.
+   * Upload une image produit (multipart) et persiste l'URL.
    * - Vérifie que le produit appartient bien au pro authentifié.
-   * - Délégué à UploadsService.uploadFile() qui valide mime (jpg/png/webp)
-   *   et taille (max 10 Mo) côté infra.
+   * - Délégué à UploadsService.uploadFile() (stockage local disque + sharp,
+   *   voir uploads.service.ts) qui valide mime (jpg/png/webp) et taille
+   *   (max 10 Mo) côté infra.
    * - Réponse compatible avec le mobile : `{ data: { imageUrl } }`
    *   (le mobile lit `data.imageUrl ?? data.url`).
    */
