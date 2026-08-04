@@ -23,7 +23,13 @@ async function bootstrap() {
   const nodeEnv = configService.get<string>('NODE_ENV', 'development');
 
   // Security
-  app.use(helmet());
+  // crossOriginResourcePolicy: helmet met 'same-origin' par défaut, ce qui
+  // bloque le chargement de /uploads/** (images produits, avatars, docs)
+  // en <img> depuis l'admin (autre origine). 'cross-origin' les laisse
+  // passer sans affaiblir les autres protections (CSP, HSTS, etc.).
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
   app.use(cookieParser());
   const frontendUrl = configService.get<string>('FRONTEND_URL');
   if (!frontendUrl && nodeEnv === 'production') {
