@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { ProfessionalCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { CreateProductDto, UpdateProductDto, CreateCategoryDto, UpdateCategoryDto, ReorderCategoriesDto, GetProductsQueryDto } from './dto/product.dto';
@@ -44,7 +45,7 @@ export class ProductsService {
   // encore rattachées, establishmentType null, pour ne rien casser pendant
   // la migration manuelle par l'admin).
   async getAllCategories(userId?: string) {
-    let establishmentType: string | undefined;
+    let establishmentType: ProfessionalCategory | undefined;
     if (userId) {
       const pro = await this.prisma.professional.findUnique({ where: { userId }, select: { category: true } });
       establishmentType = pro?.category;
