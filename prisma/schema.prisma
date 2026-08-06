@@ -314,6 +314,7 @@ model Professional {
   email              String?
   website            String?
   rccm               String?
+  ifu                String?
   status             ProfessionalStatus  @default(PENDING)
   commissionRate     Float?
   deliveryRadiusKm   Float               @default(10)

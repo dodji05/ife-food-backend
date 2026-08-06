@@ -11,7 +11,11 @@ export class CreateProfessionalDto {
   @ApiProperty() @IsString() country: string;
   @ApiProperty() @IsNumber() lat: number;
   @ApiProperty() @IsNumber() lng: number;
+  // Requis en service (register()) pour l'auto-inscription mobile — laissés
+  // optionnels ici pour ne pas contraindre les autres appelants (ex: création
+  // manuelle par l'admin).
   @ApiPropertyOptional() @IsOptional() @IsString() rccm?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() ifu?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
 }
