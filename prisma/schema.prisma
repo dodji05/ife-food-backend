@@ -75,6 +75,7 @@ enum DriverStatus {
 enum VehicleType {
   BICYCLE
   MOTORCYCLE
+  TRICYCLE
   CAR
   ON_FOOT
 }
@@ -354,6 +355,9 @@ model Driver {
   vehicleType      VehicleType
   licensePlate     String?
   driverLicenseUrl String?
+  // Auto-déclaratif à l'inscription (moto/tricycle/voiture uniquement).
+  // Null = non concerné (à pied/vélo) ou pas encore déclaré.
+  isInsured        Boolean?
   status           DriverStatus @default(PENDING)
   currentLat       Float?
   currentLng       Float?

@@ -1,19 +1,24 @@
-import { IsString, IsNumber, IsOptional, IsIn, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsIn, IsBoolean, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+const VEHICLE_TYPES = ['BICYCLE','MOTORCYCLE','TRICYCLE','CAR','ON_FOOT'];
+
 export class CreateDriverDto {
-  @ApiProperty({ enum: ['BICYCLE','MOTORCYCLE','CAR','ON_FOOT'] })
-  @IsIn(['BICYCLE','MOTORCYCLE','CAR','ON_FOOT']) vehicleType: string;
+  @ApiProperty({ enum: VEHICLE_TYPES })
+  @IsIn(VEHICLE_TYPES) vehicleType: string;
   @ApiPropertyOptional() @IsOptional() @IsString() licensePlate?: string;
+  // Auto-déclaratif — requis en service pour MOTORCYCLE/TRICYCLE/CAR uniquement.
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isInsured?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() zoneCity?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() zoneCountry?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() zoneRadiusKm?: number;
 }
 
 export class UpdateDriverDto {
-  @ApiPropertyOptional({ enum: ['BICYCLE','MOTORCYCLE','CAR','ON_FOOT'] })
-  @IsOptional() @IsIn(['BICYCLE','MOTORCYCLE','CAR','ON_FOOT']) vehicleType?: string;
+  @ApiPropertyOptional({ enum: VEHICLE_TYPES })
+  @IsOptional() @IsIn(VEHICLE_TYPES) vehicleType?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() licensePlate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isInsured?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() zoneCity?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() zoneRadiusKm?: number;
 }

@@ -29,6 +29,18 @@ export class DriversService {
   ) {}
 
   async register(userId: string, dto: CreateDriverDto) {
+    // Immatriculation + déclaration d'assurance obligatoires pour les
+    // véhicules motorisés — à pied/vélo n'ont ni l'un ni l'autre à fournir.
+    const requiresPlateAndInsurance = ['MOTORCYCLE', 'TRICYCLE', 'CAR'].includes(dto.vehicleType);
+    if (requiresPlateAndInsurance) {
+      if (!dto.licensePlate?.trim()) {
+        throw new BadRequestException('Numéro d\'immatriculation requis pour ce type de véhicule');
+      }
+      if (dto.isInsured === undefined || dto.isInsured === null) {
+        throw new BadRequestException('Merci de préciser si le véhicule est assuré');
+      }
+    }
+
     const created = await this.prisma.driver.create({
       data: { ...dto, userId, vehicleType: dto.vehicleType as any, status: 'PENDING' },
     });
