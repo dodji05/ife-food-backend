@@ -102,6 +102,16 @@ export class AdminController {
     return this.adminService.deleteUser(id);
   }
 
+  @Get('users/:id/addresses')
+  getUserAddresses(@Param('id') id: string) {
+    return this.adminService.getUserAddresses(id);
+  }
+
+  @Patch('users/addresses/:addressId/gps')
+  updateUserAddressGps(@Param('addressId') addressId: string, @Body() dto: { lat: number; lng: number }) {
+    return this.adminService.updateUserAddressGps(addressId, dto);
+  }
+
   // DRIVER DETAIL + MISSIONS
   @Get('drivers/:id')
   getDriverDetail(@Param('id') id: string) {

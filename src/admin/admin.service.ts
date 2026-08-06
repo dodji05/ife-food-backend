@@ -571,6 +571,22 @@ export class AdminService {
     return { success: true };
   }
 
+  async getUserAddresses(userId: string) {
+    const addresses = await this.prisma.userAddress.findMany({
+      where: { userId },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+    });
+    return { data: addresses };
+  }
+
+  async updateUserAddressGps(addressId: string, dto: { lat: number; lng: number }) {
+    const address = await this.prisma.userAddress.update({
+      where: { id: addressId },
+      data: { lat: Number(dto.lat), lng: Number(dto.lng) },
+    });
+    return { data: address };
+  }
+
   async createUser(dto: {
     phone: string; phoneCountry?: string; firstName?: string; name?: string;
     email?: string; role?: string; countryCode?: string; currency?: string;
@@ -964,7 +980,7 @@ export class AdminService {
   async updateProfessional(id: string, dto: {
     businessName?: string; category?: string; city?: string; country?: string;
     address?: string; phone?: string; email?: string; description?: string;
-    commissionRate?: number; deliveryRadiusKm?: number;
+    commissionRate?: number; deliveryRadiusKm?: number; lat?: number; lng?: number;
   }) {
     const pro = await this.prisma.professional.update({
       where: { id },
@@ -979,6 +995,8 @@ export class AdminService {
         ...(dto.description      !== undefined && { description:      dto.description }),
         ...(dto.commissionRate   !== undefined && { commissionRate:   Number(dto.commissionRate) }),
         ...(dto.deliveryRadiusKm !== undefined && { deliveryRadiusKm: Number(dto.deliveryRadiusKm) }),
+        ...(dto.lat              !== undefined && { lat:              Number(dto.lat) }),
+        ...(dto.lng              !== undefined && { lng:              Number(dto.lng) }),
       },
       include: { user: { select: { name: true, firstName: true, phone: true, email: true, createdByAdmin: true, lastLoginAt: true } } },
     });
