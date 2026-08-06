@@ -39,10 +39,21 @@ export class ProductsService {
     }));
   }
 
-  // Toutes les catégories globales — pour le sélecteur lors de la création de produit.
-  async getAllCategories() {
+  // Catégories pour le sélecteur lors de la création de produit — filtrées
+  // par type d'établissement du pro connecté (+ catégories legacy non
+  // encore rattachées, establishmentType null, pour ne rien casser pendant
+  // la migration manuelle par l'admin).
+  async getAllCategories(userId?: string) {
+    let establishmentType: string | undefined;
+    if (userId) {
+      const pro = await this.prisma.professional.findUnique({ where: { userId }, select: { category: true } });
+      establishmentType = pro?.category;
+    }
     return this.prisma.productCategory.findMany({
-      select: { id: true, name: true, icon: true, sortOrder: true },
+      where: establishmentType
+        ? { OR: [{ establishmentType }, { establishmentType: null }] }
+        : undefined,
+      select: { id: true, name: true, icon: true, sortOrder: true, establishmentType: true },
       orderBy: { sortOrder: 'asc' },
     });
   }

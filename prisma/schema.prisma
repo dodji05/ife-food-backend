@@ -427,13 +427,17 @@ model Document {
 // ─── PRODUCTS ─────────────────────────────────
 
 model ProductCategory {
-  id        String    @id @default(uuid())
-  name      Json
-  icon      String?
-  sortOrder Int       @default(0)
-  createdAt DateTime  @default(now())
-  products  Product[]
+  id                 String                @id @default(uuid())
+  name               Json
+  icon               String?
+  sortOrder          Int                   @default(0)
+  createdAt          DateTime              @default(now())
+  // Null = catégorie historique pas encore rattachée à un type
+  // d'établissement (migration manuelle par l'admin, voir /admin/catalogue).
+  establishmentType  ProfessionalCategory?
+  products           Product[]
 
+  @@index([establishmentType])
   @@map("product_categories")
 }
 

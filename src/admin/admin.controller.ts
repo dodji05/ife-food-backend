@@ -337,6 +337,11 @@ export class AdminController {
     return this.adminService.createGlobalCategory(dto);
   }
 
+  @Patch('catalogue/categories/:id')
+  updateGlobalCategory(@Param('id') id: string, @Body() dto: any) {
+    return this.adminService.updateGlobalCategory(id, dto);
+  }
+
   @Get('catalogue/:proId')
   getCatalogueForPro(@Param('proId') proId: string) {
     return this.adminService.getCatalogueForPro(proId);

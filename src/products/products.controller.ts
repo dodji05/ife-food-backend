@@ -22,9 +22,9 @@ export class ProductsController {
 
   @Get('categories/all')
   @UseGuards(JwtAuthGuard) @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Get all global categories (for product creation picker)' })
-  getAllCategories() {
-    return this.productsService.getAllCategories();
+  @ApiOperation({ summary: 'Get categories for product creation picker, filtered by the pro\'s establishment type' })
+  getAllCategories(@CurrentUser() user: any) {
+    return this.productsService.getAllCategories(user.id);
   }
 
   @Get('categories/mine')

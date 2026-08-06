@@ -650,10 +650,21 @@ export class AdminService {
 
   // ─── CATALOGUE ADMIN ─────────────────────
   async getCatalogueForPro(proId: string) {
-    const [professional, categories, uncategorizedProducts] = await Promise.all([
-      this.prisma.professional.findUnique({ where: { id: proId }, select: { id: true, businessName: true, category: true, city: true } }),
+    const professional = await this.prisma.professional.findUnique({ where: { id: proId }, select: { id: true, businessName: true, category: true, city: true } });
+    if (!professional) throw new NotFoundException('Professionnel introuvable');
+
+    const [categories, uncategorizedProducts] = await Promise.all([
       this.prisma.productCategory.findMany({
-        // Toutes les catégories (globales + legacy pro) — cohérent avec getGlobalCategories
+        // Catégories du type d'établissement du pro + legacy non rattachées
+        // (establishmentType null) + catégories déjà utilisées par ce pro
+        // même si mal rattachées (safety net pendant la migration manuelle).
+        where: {
+          OR: [
+            { establishmentType: professional.category },
+            { establishmentType: null },
+            { products: { some: { professionalId: proId } } },
+          ],
+        },
         orderBy: { sortOrder: 'asc' },
         include: {
           products: {
@@ -669,12 +680,17 @@ export class AdminService {
         orderBy: { createdAt: 'asc' },
       }),
     ]);
-    if (!professional) throw new NotFoundException('Professionnel introuvable');
     return { data: { professional, categories, uncategorizedProducts } };
   }
 
-  async createCatalogueCategory(_proId: string, dto: { name: any; icon?: string }) {
-    return this.prisma.productCategory.create({ data: { name: dto.name, icon: dto.icon } });
+  async createCatalogueCategory(proId: string, dto: { name: any; icon?: string }) {
+    // Rattache automatiquement au type d'établissement du pro concerné —
+    // une catégorie créée depuis la fiche d'un restaurant est une catégorie
+    // "restaurant" par défaut.
+    const pro = await this.prisma.professional.findUnique({ where: { id: proId }, select: { category: true } });
+    return this.prisma.productCategory.create({
+      data: { name: dto.name, icon: dto.icon, establishmentType: pro?.category ?? null },
+    });
   }
 
   // ── Catégories globales (indépendantes d'un professionnel) ──────────────────
@@ -692,10 +708,22 @@ export class AdminService {
     return { data: categories };
   }
 
-  async createGlobalCategory(dto: { name: any; icon?: string }) {
+  async createGlobalCategory(dto: { name: any; icon?: string; establishmentType?: string }) {
     const category = await this.prisma.productCategory.create({
-      data: { name: dto.name, icon: dto.icon ?? null },
+      data: { name: dto.name, icon: dto.icon ?? null, establishmentType: (dto.establishmentType as any) ?? null },
     });
+    return { data: category };
+  }
+
+  // Permet notamment de rattacher a posteriori une catégorie historique
+  // (establishmentType null) à un type d'établissement, ou d'en changer
+  // le nom/icône.
+  async updateGlobalCategory(id: string, dto: { name?: any; icon?: string; establishmentType?: string | null }) {
+    const data: any = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.icon !== undefined) data.icon = dto.icon;
+    if (dto.establishmentType !== undefined) data.establishmentType = dto.establishmentType;
+    const category = await this.prisma.productCategory.update({ where: { id }, data });
     return { data: category };
   }
 
