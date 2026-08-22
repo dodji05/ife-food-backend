@@ -219,13 +219,27 @@ export class PaymentsService {
         const platformCfg = await this.prisma.platformConfig.findUnique({ where: { key: 'paymentGateways' } });
         const gateways = (platformCfg?.value as any) ?? {};
         if (gateways.FEDAPAY === false) throw new BadRequestException('FedaPay n\'est pas disponible');
+
+        // FedaPay (Bénin) ne traite que le XOF. Le client voit toujours sa
+        // devise d'origine (order.currency) ; seul le montant envoyé à
+        // FedaPay est converti — même mécanisme que PayPal (payments.service.ts:124).
+        const orderCurrency = order.currency.toUpperCase();
+        let fedapayAmount   = Number(order.totalAmount);
+        if (orderCurrency !== 'XOF') {
+          const rate = await this.geo.getExchangeRate(orderCurrency, 'XOF');
+          fedapayAmount = Math.ceil(Number(order.totalAmount) * rate);
+        }
+
         paymentData = await this.fedapay.createTransaction(
-          order.totalAmount,
-          order.currency,
+          fedapayAmount,
+          'XOF',
           orderId,
           { name: order.client.name ?? order.client.phone, email: order.client.email, phone: order.client.phone },
           dbCreds.FEDAPAY,
         );
+        paymentData._originalCurrency = order.currency;
+        paymentData._originalAmount   = Number(order.totalAmount);
+        paymentData._fedapayAmount    = fedapayAmount;
         break;
       }
       case PaymentGatewayName.CASH_ON_DELIVERY: {
