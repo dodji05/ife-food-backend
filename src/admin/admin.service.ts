@@ -587,6 +587,25 @@ export class AdminService {
     return { data: address };
   }
 
+  async createUserAddress(userId: string, dto: {
+    label?: string; address?: string; city?: string; lat: number; lng: number;
+  }) {
+    const count = await this.prisma.userAddress.count({ where: { userId } });
+    const address = await this.prisma.userAddress.create({
+      data: {
+        userId,
+        label: dto.label?.trim() || 'Principale',
+        address: dto.address?.trim() || 'Adresse ajoutée par l\'admin',
+        city: dto.city?.trim() || '',
+        country: 'BJ',
+        lat: Number(dto.lat),
+        lng: Number(dto.lng),
+        isDefault: count === 0,
+      },
+    });
+    return { data: address };
+  }
+
   async createUser(dto: {
     phone: string; phoneCountry?: string; firstName?: string; name?: string;
     email?: string; role?: string; countryCode?: string; currency?: string;
