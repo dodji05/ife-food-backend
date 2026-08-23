@@ -72,13 +72,29 @@ export class NotificationsService implements OnModuleInit {
         this.logger.log(`FCM push ✅ envoyé à userId=${userId} : "${title}"`);
       }
     } catch (err: unknown) {
-      // Token invalide (401) ? On invalide le cache pour forcer un refresh
-      // au prochain appel (cas où la clé service account a été révoquée).
       const status = (err as any)?.response?.status;
-      if (status === 401 || status === 403) {
+      const fcmErrorCode = (err as any)?.response?.data?.error?.status; // ex: UNREGISTERED, SENDER_ID_MISMATCH
+
+      // 401 = notre bearer OAuth (service account) est invalide/expiré → on
+      // invalide le cache pour forcer un refresh au prochain appel.
+      if (status === 401) {
         this.cachedToken = null;
         this.cachedTokenExpiry = 0;
       }
+
+      // 403 (SENDER_ID_MISMATCH) ou 404 (UNREGISTERED) sur messages:send =
+      // le token FCM de CET utilisateur est mort (ancien projet Firebase,
+      // app désinstallée, etc.) — pas un problème d'auth globale. On le
+      // supprime pour éviter de retenter indéfiniment sur un token mort ;
+      // il sera ré-enregistré proprement au prochain lancement de l'app.
+      if (status === 403 || status === 404) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { fcmToken: null },
+        }).catch(() => {});
+        this.logger.warn(`FCM token invalide (${fcmErrorCode ?? status}) supprimé pour userId=${userId}`);
+      }
+
       this.logger.error('FCM push failed', err instanceof Error ? err.message : String(err));
     }
   }
