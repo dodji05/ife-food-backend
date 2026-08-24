@@ -855,4 +855,89 @@ export class OrdersService {
 
     return { data: { success: true, driverId: driver.id } };
   }
+
+  /**
+   * Un livreur "réclame" manuellement une mission via le code que le
+   * professionnel lui a communiqué (téléphone, en personne, etc.) — les
+   * 8 premiers caractères de l'ID de commande, affichés au pro sous la
+   * forme "Commande #ABC12345" (cf. pro_order_detail_screen.dart). Même
+   * workflow de notification que l'assignation directe.
+   */
+  async claimOrderByCode(code: string, driverUserId: string) {
+    const driver = await this.prisma.driver.findFirst({
+      where: { userId: driverUserId, status: 'VALIDATED' as any },
+    });
+    if (!driver) throw new ForbiddenException('Profil livreur non validé');
+
+    const normalizedCode = code.trim().toLowerCase();
+    if (normalizedCode.length < 4) throw new BadRequestException('Code invalide');
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        id: { startsWith: normalizedCode },
+        status: 'READY_FOR_PICKUP' as any,
+        driverId: null,
+      },
+      include: { professional: { select: { businessName: true, address: true, phone: true, lat: true, lng: true } } },
+    });
+    if (!order) throw new NotFoundException('Aucune commande disponible avec ce code');
+
+    // Claim atomique : le guard driverId:null empêche deux livreurs de
+    // prendre la même commande si le pro a partagé le code deux fois.
+    const claimed = await this.prisma.order.updateMany({
+      where: { id: order.id, driverId: null },
+      data: { driverId: driver.id, status: 'DRIVER_ASSIGNED' as any },
+    });
+    if (claimed.count === 0) throw new BadRequestException('Cette commande vient d\'être prise par un autre livreur');
+
+    const pro = order.professional as any;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(order.deliveryLat - pro.lat);
+    const dLng = toRad(order.deliveryLng - pro.lng);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(pro.lat)) * Math.cos(toRad(order.deliveryLat)) * Math.sin(dLng / 2) ** 2;
+    const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    await this.prisma.delivery.upsert({
+      where: { orderId: order.id },
+      create: { orderId: order.id, driverId: driver.id, status: 'ASSIGNED' as any, distanceKm },
+      update: { driverId: driver.id, status: 'ASSIGNED' as any, distanceKm },
+    });
+
+    // Même workflow de notification que assignDriver() : socket temps réel
+    // + push FCM au livreur (canal mission), et notif client/pro standard.
+    const deliveryZone = (order as any).deliveryCity ?? pro.city ?? '';
+    this.deliveriesGateway.emitNewMission({
+      orderId:             order.id,
+      professionalName:    pro.businessName,
+      professionalAddress: pro.address,
+      professionalPhone:   pro.phone ?? '',
+      professionalLat:     pro.lat,
+      professionalLng:     pro.lng,
+      deliveryAddress:     order.deliveryAddress,
+      deliveryZone,
+      deliveryLat:         order.deliveryLat,
+      deliveryLng:         order.deliveryLng,
+      deliveryFee:         order.deliveryFee,
+      currency:            order.currency,
+      distanceKm,
+      estimatedMinutes:    Math.max(10, Math.round(distanceKm * 3 + 5)),
+      driverUserId,
+    });
+    this.notifications.sendDriverMissionPush(driverUserId, {
+      orderId:            order.id,
+      professionalName:   pro.businessName,
+      professionalAddress: pro.address,
+      deliveryZone,
+      distanceToPickupKm: null,
+      distanceKm,
+      deliveryFee:        order.deliveryFee,
+      currency:           order.currency,
+    }).catch(() => {});
+    this.deliveriesGateway.emitOrderStatus(order.id, 'DRIVER_ASSIGNED', { driverId: driver.id });
+    this.notifications.sendOrderNotification(order.id, 'DRIVER_ASSIGNED').catch(() => {});
+
+    return { data: { success: true, orderId: order.id, driverId: driver.id } };
+  }
 }

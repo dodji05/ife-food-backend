@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto, UpdateOrderStatusDto, ProfessionalOrdersQueryDto } from './dto/order.dto';
+import { CreateOrderDto, UpdateOrderStatusDto, ProfessionalOrdersQueryDto, ClaimOrderDto } from './dto/order.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('orders')
@@ -72,5 +72,11 @@ export class OrdersController {
     @CurrentUser() user: any,
   ) {
     return this.ordersService.assignDriver(id, driverUserId, user.id);
+  }
+
+  @Post('claim-by-code')
+  @ApiOperation({ summary: 'Driver manually claims a mission via the code given by the professional' })
+  claimByCode(@CurrentUser() user: any, @Body() dto: ClaimOrderDto) {
+    return this.ordersService.claimOrderByCode(dto.code, user.id);
   }
 }

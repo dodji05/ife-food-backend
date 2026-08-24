@@ -25,6 +25,11 @@ export class CreateOrderDto {
   @IsOptional() @IsDateString() scheduledDeliveryAt?: string;
 }
 
+export class ClaimOrderDto {
+  @ApiProperty({ description: 'Code communiqué par le professionnel (8 premiers caractères du n° de commande)' })
+  @IsString() code: string;
+}
+
 const ORDER_STATUSES = ['PENDING_PAYMENT','PAID','ACCEPTED','REJECTED','IN_PREPARATION','READY_FOR_PICKUP','DRIVER_ASSIGNED','PICKED_UP','IN_DELIVERY','DELIVERED','CANCELLED','REFUNDED'] as const;
 
 // Statuts virtuels acceptés par le filtre pro (côté mobile, 'active' = En cours)
