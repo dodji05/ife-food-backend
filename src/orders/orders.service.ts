@@ -838,12 +838,23 @@ export class OrdersService {
     // Le pro peut assigner un livreur favori qu'il soit en ligne ou non.
     // Reçoit le Driver.id (tel qu'envoyé par la liste favoris mobile), pas
     // le userId — la recherche doit donc se faire par `id`, pas `userId`.
-    // ⚠️ status n'est PAS un indicateur fiable d'approbation admin ici :
-    // toggleAvailability() l'écrase en 'ONLINE'/'OFFLINE' à chaque bascule
-    // (cf. drivers.service.ts) — validatedAt, lui, n'est posé qu'une fois
-    // par l'admin et jamais retouché, donc fiable pour ce contrôle.
+    // ⚠️ status n'est PAS un indicateur fiable d'approbation admin à lui
+    // seul : toggleAvailability() l'écrase en 'ONLINE'/'OFFLINE' à chaque
+    // bascule (cf. drivers.service.ts). validatedAt est fiable pour les
+    // livreurs validés depuis l'ajout de ce champ, mais les plus anciens
+    // ont validatedAt=null malgré un statut déjà approuvé — status
+    // ONLINE/OFFLINE est un signal complémentaire fiable dans ce cas
+    // précis : toggleAvailability() refuse le passage en ligne tant que
+    // status='PENDING', donc ONLINE/OFFLINE implique forcément une
+    // validation passée, même sans validatedAt renseigné.
     const driver = await this.prisma.driver.findFirst({
-      where: { id: driverId, validatedAt: { not: null } },
+      where: {
+        id: driverId,
+        OR: [
+          { validatedAt: { not: null } },
+          { status: { in: ['VALIDATED', 'ONLINE', 'OFFLINE'] as any } },
+        ],
+      },
     });
     if (!driver) throw new NotFoundException('Livreur introuvable ou non validé');
     const driverUserId = driver.userId;
@@ -918,10 +929,16 @@ export class OrdersService {
    * workflow de notification que l'assignation directe.
    */
   async claimOrderByCode(code: string, driverUserId: string) {
-    // validatedAt plutôt que status : voir commentaire dans assignDriver()
-    // ci-dessus — status est écrasé en ONLINE/OFFLINE à chaque bascule.
+    // validatedAt + status ONLINE/OFFLINE : voir commentaire dans
+    // assignDriver() ci-dessus.
     const driver = await this.prisma.driver.findFirst({
-      where: { userId: driverUserId, validatedAt: { not: null } },
+      where: {
+        userId: driverUserId,
+        OR: [
+          { validatedAt: { not: null } },
+          { status: { in: ['VALIDATED', 'ONLINE', 'OFFLINE'] as any } },
+        ],
+      },
     });
     if (!driver) throw new ForbiddenException('Profil livreur non validé');
 
