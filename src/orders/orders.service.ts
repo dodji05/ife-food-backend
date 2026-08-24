@@ -835,12 +835,15 @@ export class OrdersService {
       throw new BadRequestException('Assignation possible uniquement en statut READY_FOR_PICKUP');
     }
 
-    // Le pro peut assigner un livreur favori qu'il soit en ligne ou non —
-    // seul le statut VALIDATED (fiche livreur approuvée) est requis.
+    // Le pro peut assigner un livreur favori qu'il soit en ligne ou non.
     // Reçoit le Driver.id (tel qu'envoyé par la liste favoris mobile), pas
     // le userId — la recherche doit donc se faire par `id`, pas `userId`.
+    // ⚠️ status n'est PAS un indicateur fiable d'approbation admin ici :
+    // toggleAvailability() l'écrase en 'ONLINE'/'OFFLINE' à chaque bascule
+    // (cf. drivers.service.ts) — validatedAt, lui, n'est posé qu'une fois
+    // par l'admin et jamais retouché, donc fiable pour ce contrôle.
     const driver = await this.prisma.driver.findFirst({
-      where: { id: driverId, status: 'VALIDATED' as any },
+      where: { id: driverId, validatedAt: { not: null } },
     });
     if (!driver) throw new NotFoundException('Livreur introuvable ou non validé');
     const driverUserId = driver.userId;
@@ -915,8 +918,10 @@ export class OrdersService {
    * workflow de notification que l'assignation directe.
    */
   async claimOrderByCode(code: string, driverUserId: string) {
+    // validatedAt plutôt que status : voir commentaire dans assignDriver()
+    // ci-dessus — status est écrasé en ONLINE/OFFLINE à chaque bascule.
     const driver = await this.prisma.driver.findFirst({
-      where: { userId: driverUserId, status: 'VALIDATED' as any },
+      where: { userId: driverUserId, validatedAt: { not: null } },
     });
     if (!driver) throw new ForbiddenException('Profil livreur non validé');
 
