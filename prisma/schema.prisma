@@ -218,6 +218,7 @@ model User {
   driver           Driver?
   admin            Admin?
   clientOrders     Order[]        @relation("ClientOrders")
+  manualDeliveryConfirmations DeliveryManualConfirmation[]
   reviews          Review[]
   notifications    Notification[]
   messages         Message[]
@@ -505,7 +506,11 @@ model Order {
   rejectedReason      String?
   weatherMultiplier   Float          @default(1)
   tipAmount           Float          @default(0)
-  deliveryCode        String?
+  deliveryCode         String?
+  deliveryCodeStatus   String?   @default("ACTIVE") // ACTIVE | USED | EXPIRED
+  deliveryCodeAttempts Int       @default(0)
+  deliveryCodeUsedAt   DateTime?
+  manualConfirmation   DeliveryManualConfirmation?
   distanceKm          Float?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
@@ -524,6 +529,20 @@ model Order {
   @@index([status, createdAt])
   @@index([createdAt])
   @@map("orders")
+}
+
+// Journal d'audit des confirmations de livraison manuelles (support/admin)
+// quand le client ne peut pas fournir son code (téléphone HS, code perdu...).
+model DeliveryManualConfirmation {
+  id                String   @id @default(uuid())
+  orderId           String   @unique
+  order             Order    @relation(fields: [orderId], references: [id])
+  confirmedByUserId String
+  confirmedByUser   User     @relation(fields: [confirmedByUserId], references: [id])
+  reason            String
+  createdAt         DateTime @default(now())
+
+  @@map("delivery_manual_confirmations")
 }
 
 model OrderItem {

@@ -123,6 +123,15 @@ export class AdminController {
     return this.adminService.getDriverMissions(id);
   }
 
+  @Post('orders/:id/manual-confirm-delivery')
+  manuallyConfirmDelivery(
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.adminService.manuallyConfirmDelivery(id, user.id, reason);
+  }
+
   // PROFESSIONAL DETAIL + ORDERS
   @Get('professionals/:id')
   getProfessionalDetail(@Param('id') id: string) {

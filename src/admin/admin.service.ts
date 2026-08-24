@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { DriversService } from '../drivers/drivers.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ConfigService } from '@nestjs/config';
 import { Twilio } from 'twilio';
@@ -13,6 +14,7 @@ export class AdminService {
     private notifications: NotificationsService,
     private uploads: UploadsService,
     private config: ConfigService,
+    private drivers: DriversService,
   ) {}
 
   // ─── DASHBOARD ────────────────────────────
@@ -855,6 +857,47 @@ export class AdminService {
         tipStats: { totalTips: 0, tipCount: 0 },
       },
     };
+  }
+
+  /**
+   * Confirmation manuelle d'une livraison par le support/admin, quand le
+   * client ne peut pas fournir son code (téléphone HS, code perdu, code
+   * bloqué après trop de tentatives...). Contourne le code, mais journalise
+   * qui, pourquoi et quand — jamais de contournement silencieux.
+   */
+  async manuallyConfirmDelivery(orderId: string, adminUserId: string, reason: string) {
+    if (!reason?.trim()) throw new BadRequestException('Un motif est obligatoire');
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { delivery: true },
+    });
+    if (!order) throw new NotFoundException('Commande introuvable');
+    if (order.status === ('DELIVERED' as any)) {
+      throw new BadRequestException('Cette commande est déjà livrée');
+    }
+    if (!order.driverId || !order.delivery) {
+      throw new BadRequestException('Aucun livreur assigné à cette commande');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'DELIVERED' as any, deliveryCodeStatus: 'USED', deliveryCodeUsedAt: new Date() } as any,
+      }),
+      this.prisma.delivery.update({
+        where: { orderId },
+        data: { status: 'DELIVERED' as any, deliveredTime: new Date() },
+      }),
+      this.prisma.deliveryManualConfirmation.create({
+        data: { orderId, confirmedByUserId: adminUserId, reason: reason.trim() },
+      }),
+    ]);
+
+    await this.drivers.creditAfterDelivery(orderId, order.driverId);
+    await this.notifications.sendOrderNotification(orderId, 'DELIVERED').catch(() => {});
+
+    return { data: { success: true } };
   }
 
   async getDriverMissions(id: string) {

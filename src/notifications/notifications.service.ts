@@ -164,6 +164,20 @@ export class NotificationsService implements OnModuleInit {
     }, 'ife_missions_v2'); // canal MAX → popup heads-up prioritaire livreur
   }
 
+  /**
+   * Envoie le code de confirmation de livraison au client, exclusivement.
+   * Le livreur ne doit jamais recevoir ce code par notification — il doit
+   * le demander de vive voix au client au moment de la livraison.
+   */
+  async sendDeliveryCodePush(clientUserId: string, code: string, orderId: string) {
+    await this.sendPush(
+      clientUserId,
+      'Votre commande est en route 🚚',
+      `Votre code de confirmation de livraison est : ${code}. Communiquez ce code au livreur uniquement lorsque vous recevez votre commande.`,
+      { orderId, type: 'DELIVERY_CODE' },
+    );
+  }
+
   async sendToAllUsers(title: string, body: string, role?: string, countries?: string[]) {
     const where: any = {};
     if (role) where.role = role;

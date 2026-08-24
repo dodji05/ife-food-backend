@@ -404,7 +404,9 @@ export class OrdersService {
         paymentMethod: dto.paymentMethod as any,
         specialInstructions: dto.specialInstructions,
         scheduledDeliveryAt: dto.scheduledDeliveryAt ? new Date(dto.scheduledDeliveryAt) : null,
-        deliveryCode: String(Math.floor(1000 + Math.random() * 9000)),
+        // Le code de confirmation de livraison n'est généré qu'à
+        // l'assignation d'un livreur (cf. generateDeliveryCode) — inutile
+        // avant, et ça évite qu'il traîne en base sans destinataire.
         distanceKm,
         items: {
           create: orderItems.map((i) => ({
@@ -562,6 +564,14 @@ export class OrdersService {
       }),
       this.prisma.order.count({ where }),
     ]);
+    // Le code de confirmation de livraison n'est jamais exposé au pro
+    // (seul le client le connaît, et le communique de vive voix au livreur).
+    for (const o of orders as any[]) {
+      delete o.deliveryCode;
+      delete o.deliveryCodeStatus;
+      delete o.deliveryCodeAttempts;
+      delete o.deliveryCodeUsedAt;
+    }
     return { data: orders, meta: { total, page: pagination.page, limit: pagination.limit } };
   }
 
@@ -588,6 +598,18 @@ export class OrdersService {
     if (order.clientId !== userId && proUserId !== userId && driverUserId !== userId) {
       throw new ForbiddenException('Access denied');
     }
+
+    // Le code de confirmation de livraison ne doit JAMAIS être visible par
+    // le livreur ni le professionnel — uniquement par le client concerné.
+    // findUnique() ci-dessus ne fait pas de select explicite (tous les
+    // champs scalaires de Order sont inclus par défaut), d'où ce filtrage.
+    if (order.clientId !== userId) {
+      delete (order as any).deliveryCode;
+      delete (order as any).deliveryCodeStatus;
+      delete (order as any).deliveryCodeAttempts;
+      delete (order as any).deliveryCodeUsedAt;
+    }
+
     return { data: order };
   }
 
@@ -772,6 +794,30 @@ export class OrdersService {
   }
 
   /**
+   * Génère le code de confirmation de livraison (6 caractères par défaut,
+   * configurable via platformConfig 'delivery_confirm_code'.digits) dès
+   * qu'un livreur est assigné, et l'envoie EXCLUSIVEMENT au client par push
+   * — jamais au livreur, qui doit le demander de vive voix à la livraison.
+   */
+  private async generateAndSendDeliveryCode(orderId: string, clientId: string) {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'delivery_confirm_code' } });
+    const digits = (cfg?.value as any)?.digits ?? 6;
+    const code = String(Math.floor(Math.random() * Math.pow(10, digits))).padStart(digits, '0');
+
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        deliveryCode: code,
+        deliveryCodeStatus: 'ACTIVE',
+        deliveryCodeAttempts: 0,
+        deliveryCodeUsedAt: null,
+      } as any,
+    });
+
+    this.notifications.sendDeliveryCodePush(clientId, code, orderId).catch(() => {});
+  }
+
+  /**
    * Assignation manuelle d'un livreur favori par le professionnel.
    * Déclenché après READY_FOR_PICKUP quand le pro choisit explicitement
    * un de ses livreurs favoris disponibles.
@@ -819,6 +865,8 @@ export class OrdersService {
         update: { driverId: driver.id, status: 'ASSIGNED' as any, distanceKm },
       }),
     ]);
+
+    await this.generateAndSendDeliveryCode(orderId, order.clientId);
 
     // Notifie le livreur (socket + FCM push enrichi).
     const pro = order.professional as any;
@@ -898,6 +946,8 @@ export class OrdersService {
       Math.sin(dLat / 2) ** 2 +
       Math.cos(toRad(pro.lat)) * Math.cos(toRad(order.deliveryLat)) * Math.sin(dLng / 2) ** 2;
     const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    await this.generateAndSendDeliveryCode(order.id, order.clientId);
 
     await this.prisma.delivery.upsert({
       where: { orderId: order.id },

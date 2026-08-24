@@ -203,20 +203,47 @@ export class DriversService {
     if (!delivery) throw new NotFoundException('Delivery not found');
     if (delivery.driverId !== driver.id) throw new ForbiddenException();
 
-    // Validation du code de confirmation client (si la feature est activée par l'admin).
+    // Validation OBLIGATOIRE du code de confirmation client avant de
+    // marquer une commande DELIVERED — sécurise la livraison en garantissant
+    // que le livreur l'a bien remise au client (qui seul connaît le code).
+    const MAX_CODE_ATTEMPTS = 5;
     if (status === 'DELIVERED') {
-      const confirmCfg = await this.prisma.platformConfig.findUnique({
-        where: { key: 'delivery_confirm_code' },
-      });
-      const codeEnabled = (confirmCfg?.value as any)?.enabled ?? false;
-      if (codeEnabled) {
-        const order = await this.prisma.order.findUnique({
-          where: { id: orderId }, select: { deliveryCode: true } as any,
-        }) as any;
-        if (!order?.deliveryCode || confirmCode !== order.deliveryCode) {
-          throw new BadRequestException('Code de confirmation invalide');
-        }
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { deliveryCode: true, deliveryCodeStatus: true, deliveryCodeAttempts: true } as any,
+      }) as any;
+
+      if (!order?.deliveryCode) {
+        throw new BadRequestException('Code de confirmation indisponible pour cette commande');
       }
+      if (order.deliveryCodeStatus === 'USED') {
+        throw new BadRequestException('Cette livraison a déjà été confirmée');
+      }
+      if (order.deliveryCodeAttempts >= MAX_CODE_ATTEMPTS) {
+        throw new BadRequestException(
+          'Trop de tentatives incorrectes — validation bloquée. Contactez le support.');
+      }
+      if (confirmCode !== order.deliveryCode) {
+        const attempts = order.deliveryCodeAttempts + 1;
+        const blocked = attempts >= MAX_CODE_ATTEMPTS;
+        await this.prisma.order.update({
+          where: { id: orderId },
+          data: { deliveryCodeAttempts: attempts } as any,
+        });
+        if (blocked) {
+          this.logger.warn(`Code de livraison bloqué après ${attempts} tentatives — orderId=${orderId} driverId=${driver.id}`);
+          throw new BadRequestException(
+            'Trop de tentatives incorrectes — validation bloquée. Contactez le support.');
+        }
+        this.logger.warn(`Code de livraison incorrect (tentative ${attempts}/${MAX_CODE_ATTEMPTS}) — orderId=${orderId} driverId=${driver.id}`);
+        throw new BadRequestException(
+          `Code incorrect. Il vous reste ${MAX_CODE_ATTEMPTS - attempts} tentative(s).`);
+      }
+
+      await this.prisma.order.update({
+        where: { id: orderId },
+        data: { deliveryCodeStatus: 'USED', deliveryCodeUsedAt: new Date() } as any,
+      });
     }
 
     await this.prisma.delivery.update({
@@ -420,6 +447,14 @@ export class DriversService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    // Le code de confirmation de livraison ne doit jamais atteindre le
+    // livreur — il doit le demander de vive voix au client à la livraison.
+    for (const d of deliveries as any[]) {
+      delete d.order?.deliveryCode;
+      delete d.order?.deliveryCodeStatus;
+      delete d.order?.deliveryCodeAttempts;
+      delete d.order?.deliveryCodeUsedAt;
+    }
     return { data: deliveries };
   }
 
@@ -435,8 +470,8 @@ export class DriversService {
       data: {
         missionTimeoutSeconds:     (timeoutCfg?.value as any)?.seconds  ?? 30,
         navigationProvider:        (navCfg?.value   as any)?.provider   ?? 'GOOGLE_MAPS',
-        confirmationCodeEnabled:   confirmVal?.enabled  ?? false,
-        confirmationCodeDigits:    confirmVal?.digits   ?? 4,
+        confirmationCodeEnabled:   true,
+        confirmationCodeDigits:    confirmVal?.digits   ?? 6,
       },
     };
   }
@@ -456,7 +491,8 @@ export class DriversService {
     return { data: transactions };
   }
 
-  private async creditAfterDelivery(orderId: string, driverId: string) {
+  /** Public : réutilisé par AdminService pour la confirmation manuelle de livraison. */
+  async creditAfterDelivery(orderId: string, driverId: string) {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) return;
 
