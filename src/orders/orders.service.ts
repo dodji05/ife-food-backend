@@ -789,10 +789,12 @@ export class OrdersService {
       throw new BadRequestException('Assignation possible uniquement en statut READY_FOR_PICKUP');
     }
 
+    // Le pro peut assigner un livreur favori qu'il soit en ligne ou non —
+    // seul le statut VALIDATED (fiche livreur approuvée) est requis.
     const driver = await this.prisma.driver.findFirst({
-      where: { userId: driverUserId, status: 'VALIDATED' as any, isAvailable: true },
+      where: { userId: driverUserId, status: 'VALIDATED' as any },
     });
-    if (!driver) throw new NotFoundException('Livreur non disponible');
+    if (!driver) throw new NotFoundException('Livreur introuvable ou non validé');
 
     // Calcul distance + temps estimé (réutilise la même formule que dispatch).
     const toRad = (d: number) => (d * Math.PI) / 180;
