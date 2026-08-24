@@ -68,10 +68,10 @@ export class OrdersController {
   @ApiOperation({ summary: 'Professional manually assigns a favorite driver' })
   assignDriver(
     @Param('id') id: string,
-    @Param('driverUserId') driverUserId: string,
+    @Param('driverUserId') driverId: string,
     @CurrentUser() user: any,
   ) {
-    return this.ordersService.assignDriver(id, driverUserId, user.id);
+    return this.ordersService.assignDriver(id, driverId, user.id);
   }
 
   @Post('claim-by-code')

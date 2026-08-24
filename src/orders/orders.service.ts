@@ -822,7 +822,7 @@ export class OrdersService {
    * Déclenché après READY_FOR_PICKUP quand le pro choisit explicitement
    * un de ses livreurs favoris disponibles.
    */
-  async assignDriver(orderId: string, driverUserId: string, proUserId: string) {
+  async assignDriver(orderId: string, driverId: string, proUserId: string) {
     const prof = await this.prisma.professional.findUnique({ where: { userId: proUserId } });
     if (!prof) throw new ForbiddenException();
 
@@ -837,10 +837,13 @@ export class OrdersService {
 
     // Le pro peut assigner un livreur favori qu'il soit en ligne ou non —
     // seul le statut VALIDATED (fiche livreur approuvée) est requis.
+    // Reçoit le Driver.id (tel qu'envoyé par la liste favoris mobile), pas
+    // le userId — la recherche doit donc se faire par `id`, pas `userId`.
     const driver = await this.prisma.driver.findFirst({
-      where: { userId: driverUserId, status: 'VALIDATED' as any },
+      where: { id: driverId, status: 'VALIDATED' as any },
     });
     if (!driver) throw new NotFoundException('Livreur introuvable ou non validé');
+    const driverUserId = driver.userId;
 
     // Calcul distance + temps estimé (réutilise la même formule que dispatch).
     const toRad = (d: number) => (d * Math.PI) / 180;
