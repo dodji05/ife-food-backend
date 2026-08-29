@@ -321,6 +321,17 @@ export class AdminController {
     return this.adminService.setKmDeliveryConfig(dto);
   }
 
+  @Get('config/dispatch')
+  getDispatchConfig() { return this.adminService.getDispatchConfig(); }
+
+  @Put('config/dispatch')
+  setDispatchConfig(@Body() dto: {
+    radiusKm: number; timeoutSeconds: number;
+    vehicleCapacities: Record<string, number>;
+  }) {
+    return this.adminService.setDispatchConfig(dto);
+  }
+
   // PAYMENTS
   @Get('payments/stats')
   getPaymentStats() { return this.adminService.getPaymentStats(); }

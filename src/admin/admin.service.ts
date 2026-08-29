@@ -1901,6 +1901,54 @@ export class AdminService {
     return value;
   }
 
+  /**
+   * Paramètres du dispatch automatique aux livreurs (orders.service.ts
+   * dispatchNewMission) : rayon d'éligibilité, délai d'acceptation avant
+   * retry, capacité de missions simultanées par type de véhicule.
+   */
+  async getDispatchConfig() {
+    const [radiusCfg, timeoutCfg, capCfg] = await Promise.all([
+      this.prisma.platformConfig.findUnique({ where: { key: 'dispatch_radius' } }),
+      this.prisma.platformConfig.findUnique({ where: { key: 'mission_accept_timeout' } }),
+      this.prisma.platformConfig.findUnique({ where: { key: 'vehicle_capacity' } }),
+    ]);
+    return {
+      radiusKm:          (radiusCfg?.value as any)?.km       ?? 20,
+      timeoutSeconds:     (timeoutCfg?.value as any)?.seconds ?? 30,
+      vehicleCapacities: {
+        BICYCLE: 2, MOTORCYCLE: 5, CAR: 10, ON_FOOT: 1,
+        ...(capCfg?.value as any ?? {}),
+      },
+    };
+  }
+
+  async setDispatchConfig(dto: {
+    radiusKm: number; timeoutSeconds: number;
+    vehicleCapacities: Record<string, number>;
+  }) {
+    if (dto.radiusKm == null || isNaN(Number(dto.radiusKm)) || Number(dto.radiusKm) <= 0) {
+      throw new BadRequestException('Rayon invalide');
+    }
+    if (dto.timeoutSeconds == null || isNaN(Number(dto.timeoutSeconds)) || Number(dto.timeoutSeconds) <= 0) {
+      throw new BadRequestException('Délai invalide');
+    }
+    await this.prisma.$transaction([
+      this.prisma.platformConfig.upsert({
+        where: { key: 'dispatch_radius' }, update: { value: { km: Number(dto.radiusKm) } },
+        create: { key: 'dispatch_radius', value: { km: Number(dto.radiusKm) } },
+      }),
+      this.prisma.platformConfig.upsert({
+        where: { key: 'mission_accept_timeout' }, update: { value: { seconds: Number(dto.timeoutSeconds) } },
+        create: { key: 'mission_accept_timeout', value: { seconds: Number(dto.timeoutSeconds) } },
+      }),
+      this.prisma.platformConfig.upsert({
+        where: { key: 'vehicle_capacity' }, update: { value: dto.vehicleCapacities ?? {} },
+        create: { key: 'vehicle_capacity', value: dto.vehicleCapacities ?? {} },
+      }),
+    ]);
+    return this.getDispatchConfig();
+  }
+
   async getDeliveryZones() {
     return this.prisma.deliveryZone.findMany({ orderBy: { createdAt: 'asc' } });
   }
