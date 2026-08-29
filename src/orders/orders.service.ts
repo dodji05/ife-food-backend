@@ -78,14 +78,18 @@ export class OrdersService {
       const estimatedMinutes = Math.max(10, Math.round(distanceKm * 3 + 5));
       const deliveryZone = (order as any).deliveryCity ?? order.professional.city ?? '';
 
-      const [capConfig, timeoutConfig] = await Promise.all([
+      const [capConfig, timeoutConfig, radiusConfig] = await Promise.all([
         this.prisma.platformConfig.findUnique({ where: { key: 'vehicle_capacity' } }),
         this.prisma.platformConfig.findUnique({ where: { key: 'mission_accept_timeout' } }),
+        this.prisma.platformConfig.findUnique({ where: { key: 'dispatch_radius' } }),
       ]);
       const vehicleCapacities: Record<string, number> = {
         BICYCLE: 2, MOTORCYCLE: 5, CAR: 10, ON_FOOT: 1,
         ...(capConfig?.value as any ?? {}),
       };
+      // Rayon max (km) autour du pro pour qu'un livreur soit éligible au
+      // dispatch — configurable admin, 20km si non défini.
+      const dispatchRadiusKm: number = (radiusConfig?.value as any)?.km ?? 20;
       const timeoutSeconds: number = (timeoutConfig?.value as any)?.seconds ?? 30;
 
       const basePayload = {
@@ -140,7 +144,7 @@ export class OrdersService {
         }
 
         if (d.currentLat != null && d.currentLng != null &&
-            haversine(d.currentLat, d.currentLng, order.professional.lat, order.professional.lng) > 20) return false;
+            haversine(d.currentLat, d.currentLng, order.professional.lat, order.professional.lng) > dispatchRadiusKm) return false;
         return true;
       });
 
@@ -149,6 +153,21 @@ export class OrdersService {
         this.pendingDispatches.delete(orderId);
         return;
       }
+
+      // Le plus proche du pro est notifié en premier. Le dispatch reste un
+      // broadcast à tous les éligibles (pas un contact séquentiel un par
+      // un) — cet ordre lui donne juste une petite longueur d'avance
+      // réelle sur l'envoi des push. La résolution en cas d'acceptations
+      // quasi simultanées reste gérée par la transaction DB (premier
+      // arrivé, premier servi), aucune vraie égalité n'étant possible au
+      // niveau base de données.
+      available.sort((a, b) => {
+        const da = (a.currentLat != null && a.currentLng != null)
+          ? haversine(a.currentLat, a.currentLng, order.professional.lat, order.professional.lng) : Infinity;
+        const db = (b.currentLat != null && b.currentLng != null)
+          ? haversine(b.currentLat, b.currentLng, order.professional.lat, order.professional.lng) : Infinity;
+        return da - db;
+      });
 
       this.logger.log(`[dispatch] retry=${retryCount} order ${orderId} -> ${available.length} driver(s)`);
 
