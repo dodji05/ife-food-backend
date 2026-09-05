@@ -19,9 +19,16 @@ export class ProfessionalsService {
     const existing = await this.prisma.professional.findUnique({ where: { userId } });
     if (existing) throw new ConflictException('Professional profile already exists');
 
-    return this.prisma.professional.create({
-      data: { ...dto, userId, category: dto.category as any, status: 'PENDING' },
+    // Validation automatique à l'inscription — plus de contrôle admin
+    // manuel avant activation (décision produit du 05/09/2026).
+    const created = await this.prisma.professional.create({
+      data: {
+        ...dto, userId, category: dto.category as any,
+        status: 'VALIDATED', validatedAt: new Date(),
+      },
     });
+    await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } });
+    return created;
   }
 
   async getMyProfile(userId: string) {
@@ -43,11 +50,13 @@ export class ProfessionalsService {
         country:      'BJ',
         lat:          0,
         lng:          0,
-        status:       'PENDING',
+        status:       'VALIDATED',
+        validatedAt:  new Date(),
         deliveryRadiusKm: 10,
       },
       include: { documents: true },
     });
+    await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } }).catch(() => {});
     return { data: { ...prof, isOpen: computeIsOpen(prof.isOpen, prof.openingHours) } };
   }
 
@@ -64,7 +73,7 @@ export class ProfessionalsService {
     // + des defaults pour les champs Prisma required (category/address/city/
     // country/lat/lng/businessName). L'utilisateur complète ensuite via
     // l'écran 'Modifier mes informations'.
-    return this.prisma.professional.upsert({
+    const result = await this.prisma.professional.upsert({
       where:  { userId },
       update: { ...dto },
       create: {
@@ -76,13 +85,16 @@ export class ProfessionalsService {
         country:      'BJ',  // Bénin par défaut, à généraliser si multi-pays
         lat:          dto.lat ?? 0,
         lng:          dto.lng ?? 0,
-        status:       'PENDING',
+        status:       'VALIDATED',
+        validatedAt:  new Date(),
         description:  dto.description,
         phone:        dto.phone,
         email:        dto.email,
         deliveryRadiusKm: dto.deliveryRadiusKm ?? 10,
       },
     });
+    await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } }).catch(() => {});
+    return result;
   }
 
   async toggleOpen(userId: string) {

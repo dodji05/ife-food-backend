@@ -41,9 +41,15 @@ export class DriversService {
       }
     }
 
+    // Validation automatique à l'inscription — plus de contrôle admin
+    // manuel avant activation (décision produit du 05/09/2026).
     const created = await this.prisma.driver.create({
-      data: { ...dto, userId, vehicleType: dto.vehicleType as any, status: 'PENDING' },
+      data: {
+        ...dto, userId, vehicleType: dto.vehicleType as any,
+        status: 'VALIDATED', validatedAt: new Date(),
+      },
     });
+    await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } });
     return { data: created };
   }
 
