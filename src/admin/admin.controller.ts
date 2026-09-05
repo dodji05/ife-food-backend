@@ -332,6 +332,14 @@ export class AdminController {
     return this.adminService.setDispatchConfig(dto);
   }
 
+  @Get('config/registration')
+  getRegistrationConfig() { return this.adminService.getRegistrationConfig(); }
+
+  @Put('config/registration')
+  setRegistrationConfig(@Body() dto: { autoValidateDrivers: boolean; autoValidateProfessionals: boolean }) {
+    return this.adminService.setRegistrationConfig(dto);
+  }
+
   // PAYMENTS
   @Get('payments/stats')
   getPaymentStats() { return this.adminService.getPaymentStats(); }

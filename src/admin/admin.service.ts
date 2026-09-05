@@ -1949,6 +1949,33 @@ export class AdminService {
     return this.getDispatchConfig();
   }
 
+  /**
+   * Validation automatique (ou non) des livreurs/pros à l'inscription.
+   * Lu par ProfessionalsService/DriversService à chaque création de fiche.
+   * Défaut = true (comportement actuel) si jamais configuré.
+   */
+  async getRegistrationConfig() {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'registration_validation' } });
+    const raw = (cfg?.value as any) ?? {};
+    return {
+      autoValidateDrivers:       raw.autoValidateDrivers       ?? true,
+      autoValidateProfessionals: raw.autoValidateProfessionals ?? true,
+    };
+  }
+
+  async setRegistrationConfig(dto: { autoValidateDrivers: boolean; autoValidateProfessionals: boolean }) {
+    const value = {
+      autoValidateDrivers:       Boolean(dto.autoValidateDrivers),
+      autoValidateProfessionals: Boolean(dto.autoValidateProfessionals),
+    };
+    await this.prisma.platformConfig.upsert({
+      where: { key: 'registration_validation' },
+      update: { value },
+      create: { key: 'registration_validation', value },
+    });
+    return value;
+  }
+
   async getDeliveryZones() {
     return this.prisma.deliveryZone.findMany({ orderBy: { createdAt: 'asc' } });
   }

@@ -41,15 +41,21 @@ export class DriversService {
       }
     }
 
-    // Validation automatique à l'inscription — plus de contrôle admin
-    // manuel avant activation (décision produit du 05/09/2026).
+    // Validation automatique configurable dans l'admin (Configuration →
+    // Inscriptions) — défaut true si jamais configuré.
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'registration_validation' } });
+    const autoValidate = (cfg?.value as any)?.autoValidateDrivers ?? true;
+
     const created = await this.prisma.driver.create({
       data: {
         ...dto, userId, vehicleType: dto.vehicleType as any,
-        status: 'VALIDATED', validatedAt: new Date(),
+        status: autoValidate ? 'VALIDATED' : 'PENDING',
+        validatedAt: autoValidate ? new Date() : null,
       },
     });
-    await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } });
+    if (autoValidate) {
+      await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } });
+    }
     return { data: created };
   }
 

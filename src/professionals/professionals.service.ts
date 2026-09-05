@@ -15,19 +15,31 @@ export class ProfessionalsService {
     private notifications: NotificationsService,
   ) {}
 
+  /**
+   * Lit platformConfig('registration_validation').autoValidateProfessionals
+   * — configurable dans l'admin (Configuration → Inscriptions). Défaut true
+   * si jamais configuré, pour ne pas casser le comportement existant.
+   */
+  private async autoValidateEnabled(): Promise<boolean> {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'registration_validation' } });
+    return (cfg?.value as any)?.autoValidateProfessionals ?? true;
+  }
+
   async register(userId: string, dto: CreateProfessionalDto) {
     const existing = await this.prisma.professional.findUnique({ where: { userId } });
     if (existing) throw new ConflictException('Professional profile already exists');
 
-    // Validation automatique à l'inscription — plus de contrôle admin
-    // manuel avant activation (décision produit du 05/09/2026).
+    const autoValidate = await this.autoValidateEnabled();
     const created = await this.prisma.professional.create({
       data: {
         ...dto, userId, category: dto.category as any,
-        status: 'VALIDATED', validatedAt: new Date(),
+        status: autoValidate ? 'VALIDATED' : 'PENDING',
+        validatedAt: autoValidate ? new Date() : null,
       },
     });
-    await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } });
+    if (autoValidate) {
+      await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } });
+    }
     return created;
   }
 
@@ -38,6 +50,7 @@ export class ProfessionalsService {
     // (dashboard, toggleOpen, schedule, etc.) de fonctionner immédiatement
     // au lieu de 404. L'utilisateur complétera ses infos via 'Modifier mes
     // informations'. Catégorie/pays par défaut = RESTAURANT/BJ.
+    const autoValidate = await this.autoValidateEnabled();
     const prof = await this.prisma.professional.upsert({
       where:  { userId },
       update: {},
@@ -50,13 +63,15 @@ export class ProfessionalsService {
         country:      'BJ',
         lat:          0,
         lng:          0,
-        status:       'VALIDATED',
-        validatedAt:  new Date(),
+        status:       autoValidate ? 'VALIDATED' : 'PENDING',
+        validatedAt:  autoValidate ? new Date() : null,
         deliveryRadiusKm: 10,
       },
       include: { documents: true },
     });
-    await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } }).catch(() => {});
+    if (autoValidate) {
+      await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } }).catch(() => {});
+    }
     return { data: { ...prof, isOpen: computeIsOpen(prof.isOpen, prof.openingHours) } };
   }
 
@@ -73,6 +88,7 @@ export class ProfessionalsService {
     // + des defaults pour les champs Prisma required (category/address/city/
     // country/lat/lng/businessName). L'utilisateur complète ensuite via
     // l'écran 'Modifier mes informations'.
+    const autoValidate = await this.autoValidateEnabled();
     const result = await this.prisma.professional.upsert({
       where:  { userId },
       update: { ...dto },
@@ -85,15 +101,17 @@ export class ProfessionalsService {
         country:      'BJ',  // Bénin par défaut, à généraliser si multi-pays
         lat:          dto.lat ?? 0,
         lng:          dto.lng ?? 0,
-        status:       'VALIDATED',
-        validatedAt:  new Date(),
+        status:       autoValidate ? 'VALIDATED' : 'PENDING',
+        validatedAt:  autoValidate ? new Date() : null,
         description:  dto.description,
         phone:        dto.phone,
         email:        dto.email,
         deliveryRadiusKm: dto.deliveryRadiusKm ?? 10,
       },
     });
-    await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } }).catch(() => {});
+    if (autoValidate) {
+      await this.prisma.user.update({ where: { id: userId }, data: { status: 'ACTIVE' } }).catch(() => {});
+    }
     return result;
   }
 
