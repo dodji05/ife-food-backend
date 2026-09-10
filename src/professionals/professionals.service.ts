@@ -26,13 +26,21 @@ export class ProfessionalsService {
   }
 
   async register(userId: string, dto: CreateProfessionalDto) {
-    const existing = await this.prisma.professional.findUnique({ where: { userId } });
-    if (existing) throw new ConflictException('Professional profile already exists');
-
     const autoValidate = await this.autoValidateEnabled();
-    const created = await this.prisma.professional.create({
-      data: {
+    // upsert plutôt que create + check existing séparé : évite une violation
+    // de contrainte unique (P2002, non catchée par un filtre Prisma → 500
+    // générique côté client) si un Professional existe déjà pour cet userId
+    // (tentative d'inscription précédente interrompue), symétrique du fix
+    // appliqué à drivers.service.ts.register().
+    const created = await this.prisma.professional.upsert({
+      where: { userId },
+      create: {
         ...dto, userId, category: dto.category as any,
+        status: autoValidate ? 'VALIDATED' : 'PENDING',
+        validatedAt: autoValidate ? new Date() : null,
+      },
+      update: {
+        ...dto, category: dto.category as any,
         status: autoValidate ? 'VALIDATED' : 'PENDING',
         validatedAt: autoValidate ? new Date() : null,
       },
