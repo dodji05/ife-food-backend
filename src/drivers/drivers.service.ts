@@ -46,9 +46,19 @@ export class DriversService {
     const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'registration_validation' } });
     const autoValidate = (cfg?.value as any)?.autoValidateDrivers ?? true;
 
-    const created = await this.prisma.driver.create({
-      data: {
+    // upsert plutôt que create strict : un Driver peut déjà exister pour cet
+    // userId (tentative d'inscription précédente interrompue) — create seul
+    // lève alors une violation de contrainte unique (P2002) non catchée par
+    // un filtre Prisma, remontant en 500 générique côté client.
+    const created = await this.prisma.driver.upsert({
+      where: { userId },
+      create: {
         ...dto, userId, vehicleType: dto.vehicleType as any,
+        status: autoValidate ? 'VALIDATED' : 'PENDING',
+        validatedAt: autoValidate ? new Date() : null,
+      },
+      update: {
+        ...dto, vehicleType: dto.vehicleType as any,
         status: autoValidate ? 'VALIDATED' : 'PENDING',
         validatedAt: autoValidate ? new Date() : null,
       },
