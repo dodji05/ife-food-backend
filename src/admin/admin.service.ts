@@ -573,6 +573,77 @@ export class AdminService {
     return { success: true };
   }
 
+  /**
+   * Suppression DÉFINITIVE et irréversible d'un compte (CLIENT/DRIVER/PROFESSIONAL)
+   * et de toutes ses données liées. Comptes ADMIN jamais supprimables par ce chemin.
+   * Cascade alignée sur prisma/cleanup-test-accounts.ts (mêmes ~20 tables).
+   */
+  async hardDeleteUser(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('Compte introuvable.');
+    if (user.role === 'ADMIN') throw new BadRequestException('Un compte administrateur ne peut pas être supprimé définitivement par cette action.');
+
+    const deleteUserIds = [id];
+
+    const pro = await this.prisma.professional.findUnique({ where: { userId: id }, select: { id: true } });
+    const deleteProfessionalIds = pro ? [pro.id] : [];
+
+    const driver = await this.prisma.driver.findUnique({ where: { userId: id }, select: { id: true } });
+    const deleteDriverIds = driver ? [driver.id] : [];
+
+    const orders = await this.prisma.order.findMany({
+      where: {
+        OR: [
+          { clientId: { in: deleteUserIds } },
+          { professionalId: { in: deleteProfessionalIds } },
+          { driverId: { in: deleteDriverIds } },
+        ],
+      },
+      select: { id: true },
+    });
+    const deleteOrderIds = orders.map(o => o.id);
+
+    const wallets = await this.prisma.wallet.findMany({ where: { userId: { in: deleteUserIds } }, select: { id: true } });
+    const deleteWalletIds = wallets.map(w => w.id);
+
+    await this.prisma.$transaction([
+      this.prisma.transaction.updateMany({ where: { orderId: { in: deleteOrderIds } }, data: { orderId: null } }),
+
+      this.prisma.promoCodeUsage.deleteMany({ where: { OR: [{ orderId: { in: deleteOrderIds } }, { userId: { in: deleteUserIds } }] } }),
+      this.prisma.review.deleteMany({ where: { OR: [{ orderId: { in: deleteOrderIds } }, { reviewerId: { in: deleteUserIds } }, { professionalId: { in: deleteProfessionalIds } }, { driverId: { in: deleteDriverIds } }] } }),
+      this.prisma.delivery.deleteMany({ where: { OR: [{ orderId: { in: deleteOrderIds } }, { driverId: { in: deleteDriverIds } }] } }),
+      this.prisma.deliveryManualConfirmation.deleteMany({ where: { orderId: { in: deleteOrderIds } } }),
+      this.prisma.payment.deleteMany({ where: { orderId: { in: deleteOrderIds } } }),
+      this.prisma.orderItem.deleteMany({ where: { orderId: { in: deleteOrderIds } } }),
+      this.prisma.order.deleteMany({ where: { id: { in: deleteOrderIds } } }),
+
+      this.prisma.message.deleteMany({ where: { senderId: { in: deleteUserIds } } }),
+      this.prisma.notification.deleteMany({ where: { userId: { in: deleteUserIds } } }),
+      this.prisma.loginLog.deleteMany({ where: { userId: { in: deleteUserIds } } }),
+      this.prisma.legalAcceptance.deleteMany({ where: { userId: { in: deleteUserIds } } }),
+      this.prisma.otpSession.deleteMany({ where: { userId: { in: deleteUserIds } } }),
+
+      this.prisma.walletTransaction.deleteMany({ where: { walletId: { in: deleteWalletIds } } }),
+      this.prisma.wallet.deleteMany({ where: { userId: { in: deleteUserIds } } }),
+      this.prisma.transaction.deleteMany({ where: { OR: [{ userId: { in: deleteUserIds } }, { professionalId: { in: deleteProfessionalIds } }, { driverId: { in: deleteDriverIds } }] } }),
+      this.prisma.referral.deleteMany({ where: { OR: [{ referrerId: { in: deleteUserIds } }, { refereeId: { in: deleteUserIds } }] } }),
+
+      this.prisma.document.deleteMany({ where: { OR: [{ professionalId: { in: deleteProfessionalIds } }, { driverId: { in: deleteDriverIds } }] } }),
+      this.prisma.driverDeliveryZone.deleteMany({ where: { driverId: { in: deleteDriverIds } } }),
+      this.prisma.professionalFavoriteDriver.deleteMany({ where: { OR: [{ professionalId: { in: deleteProfessionalIds } }, { driverId: { in: deleteDriverIds } }] } }),
+      this.prisma.product.deleteMany({ where: { professionalId: { in: deleteProfessionalIds } } }),
+      this.prisma.productCategory.deleteMany({ where: { professionalId: { in: deleteProfessionalIds } } }),
+
+      this.prisma.professional.deleteMany({ where: { id: { in: deleteProfessionalIds } } }),
+      this.prisma.driver.deleteMany({ where: { id: { in: deleteDriverIds } } }),
+
+      // UserAddress a onDelete:Cascade sur userId -> supprimé automatiquement.
+      this.prisma.user.deleteMany({ where: { id: { in: deleteUserIds } } }),
+    ]);
+
+    return { success: true };
+  }
+
   async getUserAddresses(userId: string) {
     const addresses = await this.prisma.userAddress.findMany({
       where: { userId },

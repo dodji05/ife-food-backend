@@ -102,6 +102,13 @@ export class AdminController {
     return this.adminService.deleteUser(id);
   }
 
+  // Suppression DÉFINITIVE et irréversible (compte + toutes données liées).
+  // Distincte de deleteUser (soft-delete/BANNED) ci-dessus.
+  @Delete('users/:id/permanent')
+  hardDeleteUser(@Param('id') id: string) {
+    return this.adminService.hardDeleteUser(id);
+  }
+
   @Get('users/:id/addresses')
   getUserAddresses(@Param('id') id: string) {
     return this.adminService.getUserAddresses(id);
