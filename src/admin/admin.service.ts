@@ -638,8 +638,9 @@ export class AdminService {
       this.prisma.document.deleteMany({ where: { OR: [{ professionalId: { in: deleteProfessionalIds } }, { driverId: { in: deleteDriverIds } }] } }),
       this.prisma.driverDeliveryZone.deleteMany({ where: { driverId: { in: deleteDriverIds } } }),
       this.prisma.professionalFavoriteDriver.deleteMany({ where: { OR: [{ professionalId: { in: deleteProfessionalIds } }, { driverId: { in: deleteDriverIds } }] } }),
+      // ProductCategory n'a pas de professionalId (établissementType global,
+      // partagé entre pros) — rien à supprimer ici, contrairement à Product.
       this.prisma.product.deleteMany({ where: { professionalId: { in: deleteProfessionalIds } } }),
-      this.prisma.productCategory.deleteMany({ where: { professionalId: { in: deleteProfessionalIds } } }),
 
       this.prisma.professional.deleteMany({ where: { id: { in: deleteProfessionalIds } } }),
       this.prisma.driver.deleteMany({ where: { id: { in: deleteDriverIds } } }),
