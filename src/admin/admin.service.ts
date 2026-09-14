@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UploadsService } from '../uploads/uploads.service';
@@ -6,6 +6,7 @@ import { DriversService } from '../drivers/drivers.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ConfigService } from '@nestjs/config';
 import { Twilio } from 'twilio';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AdminService {
@@ -578,7 +579,13 @@ export class AdminService {
    * et de toutes ses données liées. Comptes ADMIN jamais supprimables par ce chemin.
    * Cascade alignée sur prisma/cleanup-test-accounts.ts (mêmes ~20 tables).
    */
-  async hardDeleteUser(id: string) {
+  async hardDeleteUser(id: string, adminUserId: string, password: string) {
+    if (!password) throw new UnauthorizedException('Mot de passe requis.');
+    const admin = await this.prisma.user.findUnique({ where: { id: adminUserId } });
+    if (!admin?.pinHash || !(await bcrypt.compare(password, admin.pinHash))) {
+      throw new UnauthorizedException('Mot de passe incorrect.');
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Compte introuvable.');
     if (user.role === 'ADMIN') throw new BadRequestException('Un compte administrateur ne peut pas être supprimé définitivement par cette action.');

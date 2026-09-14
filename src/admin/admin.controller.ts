@@ -103,10 +103,13 @@ export class AdminController {
   }
 
   // Suppression DÉFINITIVE et irréversible (compte + toutes données liées).
-  // Distincte de deleteUser (soft-delete/BANNED) ci-dessus.
+  // Distincte de deleteUser (soft-delete/BANNED) ci-dessus. Réservée aux
+  // SUPER_ADMIN, mot de passe admin requis en confirmation.
   @Delete('users/:id/permanent')
-  hardDeleteUser(@Param('id') id: string) {
-    return this.adminService.hardDeleteUser(id);
+  @UseGuards(AdminLevelGuard)
+  @AdminLevel('SUPER_ADMIN')
+  hardDeleteUser(@Param('id') id: string, @CurrentUser() admin: any, @Body('password') password: string) {
+    return this.adminService.hardDeleteUser(id, admin.id, password);
   }
 
   @Get('users/:id/addresses')
