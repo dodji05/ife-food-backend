@@ -378,23 +378,46 @@ export class OrdersService {
     if (professional.lat == null || professional.lng == null) {
       this.logger.warn(`Order creation: professional ${professional.id} has no coordinates, defaulting to Cotonou`);
     }
-    // Calcul parallèle : frais de livraison + distance routière réelle (Google Maps)
-    // getRoutingDistance utilise l'API Distance Matrix et bascule sur Haversine si
-    // GOOGLE_MAPS_API_KEY est absent ou si l'API est indisponible.
     const proLat = professional.lat != null ? Number(professional.lat) : 6.36;
     const proLng = professional.lng != null ? Number(professional.lng) : 2.42;
 
-    const [deliveryFee, distanceKm] = await Promise.all([
-      this.geo.calculateDeliveryFee(
-        professional.lat, professional.lng,
-        dto.deliveryLat, dto.deliveryLng,
-        professional.city, dto.deliveryCity,
-      ),
-      this.geo.getRoutingDistance(
-        proLat, proLng,
-        dto.deliveryLat, dto.deliveryLng,
-      ),
-    ]);
+    const orderType = (dto.orderType as any) ?? 'DELIVERY';
+
+    // PICKUP/DINE_IN : le client vient chercher/consommer sur place — pas de
+    // livreur, pas de frais de livraison. On utilise l'adresse du pro comme
+    // deliveryAddress/lat/lng (champs requis en base) plutôt que de les
+    // rendre nullable partout où ils sont lus (tracking, stats...).
+    let deliveryAddress: string;
+    let deliveryLat: number;
+    let deliveryLng: number;
+    let deliveryFee: number;
+    let distanceKm: number;
+
+    if (orderType === 'DELIVERY') {
+      if (dto.deliveryAddress == null || dto.deliveryLat == null || dto.deliveryLng == null) {
+        throw new BadRequestException('Adresse de livraison requise pour une commande en livraison');
+      }
+      deliveryAddress = dto.deliveryAddress;
+      deliveryLat = dto.deliveryLat;
+      deliveryLng = dto.deliveryLng;
+      // Calcul parallèle : frais de livraison + distance routière réelle (Google Maps)
+      // getRoutingDistance utilise l'API Distance Matrix et bascule sur Haversine si
+      // GOOGLE_MAPS_API_KEY est absent ou si l'API est indisponible.
+      [deliveryFee, distanceKm] = await Promise.all([
+        this.geo.calculateDeliveryFee(
+          professional.lat, professional.lng,
+          dto.deliveryLat, dto.deliveryLng,
+          professional.city, dto.deliveryCity,
+        ),
+        this.geo.getRoutingDistance(proLat, proLng, dto.deliveryLat, dto.deliveryLng),
+      ]);
+    } else {
+      deliveryAddress = professional.address ?? '';
+      deliveryLat = proLat;
+      deliveryLng = proLng;
+      deliveryFee = 0;
+      distanceKm = 0;
+    }
 
     // Handle promo code
     let promoDiscount = 0;
@@ -408,6 +431,7 @@ export class OrdersService {
       data: {
         clientId,
         professionalId: dto.professionalId,
+        orderType: orderType as any,
         subtotal,
         deliveryFee,
         commissionAmount,
@@ -415,11 +439,11 @@ export class OrdersService {
         promoDiscount,
         totalAmount,
         currency: dto.currency,
-        deliveryAddress: dto.deliveryAddress,
-        deliveryLat: dto.deliveryLat,
-        deliveryLng: dto.deliveryLng,
-        deliveryCity: dto.deliveryCity,
-        deliveryCountry: dto.deliveryCountry,
+        deliveryAddress,
+        deliveryLat,
+        deliveryLng,
+        deliveryCity: orderType === 'DELIVERY' ? dto.deliveryCity : professional.city,
+        deliveryCountry: orderType === 'DELIVERY' ? dto.deliveryCountry : professional.country,
         paymentMethod: dto.paymentMethod as any,
         specialInstructions: dto.specialInstructions,
         scheduledDeliveryAt: dto.scheduledDeliveryAt ? new Date(dto.scheduledDeliveryAt) : null,
@@ -527,7 +551,7 @@ export class OrdersService {
           where: { id: order.id }, data: { status: 'READY_FOR_PICKUP' as any },
         });
         this.deliveriesGateway.emitOrderStatus(order.id, 'READY_FOR_PICKUP');
-        this.dispatchNewMission(order.id);
+        if ((order as any).orderType === 'DELIVERY') this.dispatchNewMission(order.id);
       }
       // Re-fetch pour retourner l'order avec le nouveau status
       return this.prisma.order.findUnique({
@@ -674,7 +698,9 @@ export class OrdersService {
     // drivers éligibles. C'est le moment correct dans le workflow métier
     // (avant : on dispatchait à PAID, le driver pouvait arriver chez un
     // pro qui n'avait pas encore préparé/accepté la commande).
-    if (dto.status === 'READY_FOR_PICKUP') {
+    // PICKUP/DINE_IN : pas de livreur — le client vient chercher/consommer
+    // lui-même, le pro marquera directement DELIVERED à la remise.
+    if (dto.status === 'READY_FOR_PICKUP' && (order as any).orderType === 'DELIVERY') {
       this.dispatchNewMission(orderId);
     }
 

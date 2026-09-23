@@ -80,6 +80,12 @@ enum VehicleType {
   ON_FOOT
 }
 
+enum OrderType {
+  DELIVERY
+  PICKUP
+  DINE_IN
+}
+
 enum OrderStatus {
   PENDING_PAYMENT
   PAID
@@ -482,6 +488,7 @@ model Order {
   clientId            String
   professionalId      String
   driverId            String?
+  orderType           OrderType      @default(DELIVERY)
   status              OrderStatus    @default(PENDING_PAYMENT)
   totalAmount         Float
   subtotal            Float

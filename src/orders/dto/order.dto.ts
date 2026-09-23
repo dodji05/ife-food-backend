@@ -12,9 +12,14 @@ export class OrderItemDto {
 export class CreateOrderDto {
   @ApiProperty() @IsString() professionalId: string;
   @ApiProperty({ type: [OrderItemDto] }) @IsArray() @ValidateNested({ each: true }) @Type(() => OrderItemDto) items: OrderItemDto[];
-  @ApiProperty() @IsString() deliveryAddress: string;
-  @ApiProperty() @IsNumber() deliveryLat: number;
-  @ApiProperty() @IsNumber() deliveryLng: number;
+  @ApiPropertyOptional({ enum: ['DELIVERY', 'PICKUP', 'DINE_IN'], description: 'Défaut DELIVERY. PICKUP/DINE_IN : pas de livreur ni frais de livraison.' })
+  @IsOptional() @IsIn(['DELIVERY', 'PICKUP', 'DINE_IN']) orderType?: string;
+  // Requis seulement pour DELIVERY — validé en service selon orderType
+  // (class-validator ne sait pas conditionner @IsString/@IsNumber sur un
+  // autre champ du même DTO sans @ValidateIf, plus simple de valider en service).
+  @ApiPropertyOptional() @IsOptional() @IsString() deliveryAddress?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() deliveryLat?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() deliveryLng?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() deliveryCity?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() deliveryCountry?: string;
   @ApiProperty() @IsString() currency: string;
