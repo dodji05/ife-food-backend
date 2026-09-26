@@ -1906,6 +1906,75 @@ export class AdminService {
     return { success: true };
   }
 
+  // ─── PROMOTIONS PRODUIT "N achetés = 1 offert" ────────────────
+  async getProductPromotions() {
+    return this.prisma.productPromotion.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        professional: { select: { id: true, businessName: true } },
+        product: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async createProductPromotion(dto: any) {
+    const { productId, buyQuantity, expiresAt } = dto;
+    if (!productId) throw new BadRequestException('Produit requis');
+    const qty = Number(buyQuantity);
+    if (!Number.isInteger(qty) || qty < 1) throw new BadRequestException('buyQuantity doit être un entier ≥ 1');
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new NotFoundException('Produit introuvable');
+    const existingActive = await this.prisma.productPromotion.findFirst({ where: { productId, isActive: true } });
+    if (existingActive) throw new BadRequestException('Ce produit a déjà une promotion active');
+    return this.prisma.productPromotion.create({
+      data: {
+        professionalId: product.professionalId,
+        productId,
+        buyQuantity: qty,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+      },
+      include: {
+        professional: { select: { id: true, businessName: true } },
+        product: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async updateProductPromotion(id: string, dto: any) {
+    const { buyQuantity, isActive, expiresAt } = dto;
+    const patch: any = {};
+    if (buyQuantity !== undefined) {
+      const qty = Number(buyQuantity);
+      if (!Number.isInteger(qty) || qty < 1) throw new BadRequestException('buyQuantity doit être un entier ≥ 1');
+      patch.buyQuantity = qty;
+    }
+    if (expiresAt !== undefined) patch.expiresAt = expiresAt ? new Date(expiresAt) : null;
+    if (isActive !== undefined) {
+      if (isActive) {
+        const promo = await this.prisma.productPromotion.findUnique({ where: { id } });
+        if (!promo) throw new NotFoundException();
+        const conflict = await this.prisma.productPromotion.findFirst({
+          where: { productId: promo.productId, isActive: true, id: { not: id } },
+        });
+        if (conflict) throw new BadRequestException('Ce produit a déjà une promotion active');
+      }
+      patch.isActive = isActive;
+    }
+    return this.prisma.productPromotion.update({
+      where: { id },
+      data: patch,
+      include: {
+        professional: { select: { id: true, businessName: true } },
+        product: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async deleteProductPromotion(id: string) {
+    await this.prisma.productPromotion.delete({ where: { id } });
+    return { success: true };
+  }
+
   // ─── LEGAL PAGES ──────────────────────────
   async getLegalPage(type: string, lang: string) {
     return this.prisma.legalPage.findUnique({ where: { type_lang: { type, lang: lang as any } } });

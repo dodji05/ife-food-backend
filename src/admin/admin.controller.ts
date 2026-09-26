@@ -447,6 +447,19 @@ export class AdminController {
   @Delete('promo-codes/:id')
   deletePromoCode(@Param('id') id: string) { return this.adminService.deletePromoCode(id); }
 
+  // PRODUCT PROMOTIONS ("N achetés = 1 offert")
+  @Get('product-promotions')
+  getProductPromotions() { return this.adminService.getProductPromotions(); }
+
+  @Post('product-promotions')
+  createProductPromotion(@Body() dto: any) { return this.adminService.createProductPromotion(dto); }
+
+  @Patch('product-promotions/:id')
+  updateProductPromotion(@Param('id') id: string, @Body() dto: any) { return this.adminService.updateProductPromotion(id, dto); }
+
+  @Delete('product-promotions/:id')
+  deleteProductPromotion(@Param('id') id: string) { return this.adminService.deleteProductPromotion(id); }
+
   // REFERRALS
   @Get('referrals')
   getReferrals() { return this.adminService.getReferrals(); }

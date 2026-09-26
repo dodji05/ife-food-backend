@@ -143,6 +143,35 @@ export class ProfessionalsController {
     return this.professionalsService.deletePromoCode(user.id, promoId);
   }
 
+  // ── Promotions produit "N achetés = 1 offert" (pro-side) ──────────────────
+  @Get('me/product-promotions')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'List professional product promotions (buy N get 1 free)' })
+  listProductPromotions(@CurrentUser() user: any) {
+    return this.professionalsService.listProductPromotions(user.id);
+  }
+
+  @Post('me/product-promotions')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Create a product promotion for this professional' })
+  createProductPromotion(@CurrentUser() user: any, @Body() dto: any) {
+    return this.professionalsService.createProductPromotion(user.id, dto);
+  }
+
+  @Patch('me/product-promotions/:promoId')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Update a product promotion' })
+  updateProductPromotion(@CurrentUser() user: any, @Param('promoId') promoId: string, @Body() dto: any) {
+    return this.professionalsService.updateProductPromotion(user.id, promoId, dto);
+  }
+
+  @Delete('me/product-promotions/:promoId')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Delete a product promotion' })
+  deleteProductPromotion(@CurrentUser() user: any, @Param('promoId') promoId: string) {
+    return this.professionalsService.deleteProductPromotion(user.id, promoId);
+  }
+
   // ── Reviews ───────────────────────────────────────────────────────────────
   @Get('me/reviews')
   @ApiBearerAuth('JWT')

@@ -340,6 +340,7 @@ model Professional {
   favoriteDrivers    ProfessionalFavoriteDriver[]
   transactions       Transaction[]
   promoCodes         PromoCode[]
+  productPromotions  ProductPromotion[]
 
   @@map("professionals")
 }
@@ -475,6 +476,7 @@ model Product {
   category       ProductCategory? @relation(fields: [categoryId], references: [id])
   orderItems     OrderItem[]
   promoCodes     PromoCode[]
+  productPromotions ProductPromotion[]
 
   @@index([professionalId])
   @@index([categoryId])
@@ -706,6 +708,28 @@ model PromoCodeUsage {
   @@index([promoCodeId])
   @@index([userId])
   @@map("promo_code_usages")
+}
+
+// Promo "N achetés = 1 offert" — automatique, liée à un produit précis,
+// pas de code à saisir (distincte de PromoCode). Un seul produit ne peut
+// avoir qu'une promo active à la fois (contrainte applicative, cf.
+// products.service.ts / professionals.service.ts).
+model ProductPromotion {
+  id             String       @id @default(uuid())
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // N articles achetés pour 1 offert. "1 acheté = 1 offert" -> buyQuantity=1.
+  buyQuantity    Int
+  isActive       Boolean      @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([professionalId])
+  @@index([productId])
+  @@map("product_promotions")
 }
 
 // ─── TRANSACTIONS ─────────────────────────────

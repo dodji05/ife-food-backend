@@ -318,10 +318,29 @@ export class OrdersService {
     const products = await this.prisma.product.findMany({ where: { id: { in: productIds } } });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
+    // Promotions "N achetés = 1 offert" actives sur les produits commandés —
+    // automatiques, pas de code à saisir (cf. ProductPromotion, distinct de
+    // PromoCode). Un seul produit ne peut avoir qu'une promo active à la fois.
+    const activePromotions = await this.prisma.productPromotion.findMany({
+      where: {
+        productId: { in: productIds },
+        isActive: true,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+    });
+    const promotionByProduct = new Map(activePromotions.map((p) => [p.productId, p]));
+
     const baseItems = dto.items.map((item) => {
       const product = productMap.get(item.productId);
       if (!product || !product.isAvailable) throw new BadRequestException(`Product ${item.productId} unavailable`);
-      return { ...item, unitPrice: product.price, totalPrice: product.price * item.quantity, product };
+      const promo = promotionByProduct.get(item.productId);
+      // floor(quantité / (buyQuantity + 1)) unités offertes — ex: buyQuantity=3,
+      // quantité=8 -> floor(8/4)=2 offertes. unitPrice reste le prix plein
+      // (affichage), seul totalPrice est réduit (même logique que le mode
+      // commission FIXED_PER_DISH plus bas, où unitPrice*quantity != totalPrice).
+      const freeUnits = promo ? Math.floor(item.quantity / (promo.buyQuantity + 1)) : 0;
+      const totalPrice = product.price * (item.quantity - freeUnits);
+      return { ...item, unitPrice: product.price, totalPrice, product, freeUnits };
     });
 
     // Get commission config (supports new format { professional: {type,value} } and legacy { type, value })
@@ -331,6 +350,9 @@ export class OrdersService {
 
     const baseSubtotal   = baseItems.reduce((sum, i) => sum + i.totalPrice, 0);
     const totalItemCount = baseItems.reduce((sum, i) => sum + i.quantity, 0);
+    // Exclut les unités offertes (ProductPromotion) — pas de commission
+    // fixe sur ce qui n'est pas facturé au client.
+    const paidItemCount  = baseItems.reduce((sum, i) => sum + (i.quantity - i.freeUnits), 0);
 
     let commissionAmount = 0;
     let orderItems = baseItems;
@@ -353,20 +375,22 @@ export class OrdersService {
     if (tierRate > 0 || tierFixed > 0) {
       // Taux (%) sur le sous-total
       if (tierRate > 0) commissionAmount += baseSubtotal * (tierRate / 100);
-      // Montant fixe × nombre de plats commandés (tierFixed = tarif par plat)
-      if (tierFixed > 0) commissionAmount += tierFixed * totalItemCount;
+      // Montant fixe × nombre de plats facturés (tierFixed = tarif par plat)
+      if (tierFixed > 0) commissionAmount += tierFixed * paidItemCount;
 
     // ── Fallback : mode global type/value (legacy + rétrocompatibilité) ───────
     } else if (proCfg?.type === 'PERCENTAGE') {
       commissionAmount = baseSubtotal * (Number(proCfg.value) / 100);
     } else if (proCfg?.type === 'FIXED_PER_DISH' || proCfg?.type === 'FIXED_AMOUNT') {
       const fixedPerDish = Number(proCfg.value ?? 0);
-      commissionAmount = baseItems.reduce((sum, i) => sum + fixedPerDish * i.quantity, 0);
+      // Unités offertes (ProductPromotion) exclues — pas de commission ni de
+      // frais fixe sur ce qui n'est pas facturé au client.
+      commissionAmount = baseItems.reduce((sum, i) => sum + fixedPerDish * (i.quantity - i.freeUnits), 0);
       // Inflate unitPrice so OrderItem reflects what the client actually paid
       orderItems = baseItems.map((i) => ({
         ...i,
         unitPrice: i.unitPrice + fixedPerDish,
-        totalPrice: i.totalPrice + fixedPerDish * i.quantity,
+        totalPrice: i.totalPrice + fixedPerDish * (i.quantity - i.freeUnits),
       }));
     }
 

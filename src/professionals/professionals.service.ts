@@ -390,6 +390,85 @@ export class ProfessionalsService {
     return { data: { deleted: true } };
   }
 
+  // ── Promotions produit "N achetés = 1 offert" (pro-side) ──────────────────
+  // Distinctes des PromoCode : automatiques, liées à un produit précis, pas
+  // de code à saisir. Un seul produit ne peut avoir qu'une promo active à la
+  // fois (contrainte applicative — évite l'ambiguïté au calcul du panier).
+  async listProductPromotions(userId: string) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const promos = await this.prisma.productPromotion.findMany({
+      where: { professionalId: prof.id },
+      include: { product: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data: promos };
+  }
+
+  async createProductPromotion(userId: string, dto: { productId: string; buyQuantity: number; expiresAt?: string }) {
+    const prof = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const buyQuantity = Number(dto.buyQuantity);
+    if (!dto.productId) throw new BadRequestException('Produit requis');
+    if (!Number.isInteger(buyQuantity) || buyQuantity < 1) {
+      throw new BadRequestException('buyQuantity doit être un entier ≥ 1');
+    }
+    const product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
+    if (!product || product.professionalId !== prof.id) throw new ForbiddenException('Produit introuvable pour cet établissement');
+
+    const existingActive = await this.prisma.productPromotion.findFirst({
+      where: { productId: dto.productId, isActive: true },
+    });
+    if (existingActive) throw new ConflictException('Ce produit a déjà une promotion active');
+
+    const created = await this.prisma.productPromotion.create({
+      data: {
+        professionalId: prof.id,
+        productId: dto.productId,
+        buyQuantity,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+      },
+    });
+    return { data: created };
+  }
+
+  async updateProductPromotion(userId: string, promoId: string, dto: { buyQuantity?: number; isActive?: boolean; expiresAt?: string | null }) {
+    const prof  = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const promo = await this.prisma.productPromotion.findUnique({ where: { id: promoId } });
+    if (!promo || promo.professionalId !== prof.id) throw new ForbiddenException();
+
+    const patch: any = {};
+    if (dto.buyQuantity !== undefined) {
+      const buyQuantity = Number(dto.buyQuantity);
+      if (!Number.isInteger(buyQuantity) || buyQuantity < 1) {
+        throw new BadRequestException('buyQuantity doit être un entier ≥ 1');
+      }
+      patch.buyQuantity = buyQuantity;
+    }
+    if (dto.expiresAt !== undefined) patch.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    if (dto.isActive !== undefined) {
+      if (dto.isActive) {
+        const conflict = await this.prisma.productPromotion.findFirst({
+          where: { productId: promo.productId, isActive: true, id: { not: promoId } },
+        });
+        if (conflict) throw new ConflictException('Ce produit a déjà une promotion active');
+      }
+      patch.isActive = dto.isActive;
+    }
+    const updated = await this.prisma.productPromotion.update({ where: { id: promoId }, data: patch });
+    return { data: updated };
+  }
+
+  async deleteProductPromotion(userId: string, promoId: string) {
+    const prof  = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!prof) throw new NotFoundException();
+    const promo = await this.prisma.productPromotion.findUnique({ where: { id: promoId } });
+    if (!promo || promo.professionalId !== prof.id) throw new ForbiddenException();
+    await this.prisma.productPromotion.delete({ where: { id: promoId } });
+    return { data: { deleted: true } };
+  }
+
   async getDashboard(userId: string) {
     // Pas de upsert ici (le faire dans getMyProfile/updateProfile suffit) :
     // si l'utilisateur n'a vraiment aucun record pro, on retourne des stats
