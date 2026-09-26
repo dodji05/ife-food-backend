@@ -190,10 +190,23 @@ export class ProductsService {
     const where: any = { professionalId, isDeleted: false };
     if (isAvailable !== undefined) where.isAvailable = isAvailable;
     const [products, total] = await Promise.all([
-      this.prisma.product.findMany({ where, include: { category: true }, skip: pagination.skip, take: pagination.limit }),
+      this.prisma.product.findMany({
+        where,
+        include: {
+          category: true,
+          // "N achetés = 1 offert" (ProductPromotion) — au plus une active par
+          // produit (contrainte applicative), incluse pour affichage client.
+          productPromotions: { where: this._activePromotionWhere() },
+        },
+        skip: pagination.skip, take: pagination.limit,
+      }),
       this.prisma.product.count({ where }),
     ]);
     return { data: products, meta: { total, page: pagination.page, limit: pagination.limit } };
+  }
+
+  private _activePromotionWhere() {
+    return { isActive: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] };
   }
 
   async searchProducts(query: string, lat?: number, lng?: number) {
@@ -207,7 +220,10 @@ export class ProductsService {
           { name: { path: ['en'], string_contains: query } },
         ],
       },
-      include: { professional: { select: { id: true, businessName: true, lat: true, lng: true, logoUrl: true } } },
+      include: {
+        professional: { select: { id: true, businessName: true, lat: true, lng: true, logoUrl: true } },
+        productPromotions: { where: this._activePromotionWhere() },
+      },
       take: 20,
     });
     return { data: products };
